@@ -1,8 +1,10 @@
 {
-  "schemaVersion": 1,
-  "channel": "test",
-  "enabled": false,
-  "version": "0.0.0-test.1",
-  "packages": [],
-  "notes": "Preparacion del canal privado. Sin paquetes instalables. El launcher actual todavia no consume este formato."
+    "schemaVersion":  1,
+    "channel":  "test",
+    "enabled":  true,
+    "version":  "0.2",
+    "packagePath":  "updates/test/packages/pes6-launcher-0.2.zip",
+    "packageRef":  "35ff415663a6006027c2cb8f8d3118ff24353e78",
+    "sha256":  "459c22716a828bd5d36bbee5799159a35a86392de78be9429804103ed6520fba",
+    "size":  234798
 }

@@ -1,18 +1,22 @@
 CANAL DE PRUEBA - NO ES UNA RELEASE
 
-manifest.json es una propuesta inicial, todavia no conectada al launcher.
-enabled=false y packages=[]: no hay actualizacion descargable ni instalable.
-La version 0.0.0-test.1 identifica esta preparacion, no una version del juego.
+manifest.json ofrece la version de prueba 0.2 al launcher local 0.1.
+El ZIP vive en la rama privada update-test-packages y se consulta usando
+el commit packageRef, con verificacion obligatoria de tamano y SHA-256.
+Solo contiene las cuatro copias del launcher (raiz y bin).
 
 Este repositorio es privado. La sesion de Chrome no autentica al launcher.
-Para una prueba local se puede suministrar una credencial individual mediante
-el almacen de credenciales del sistema. No guardarla en fuentes, paquetes,
-archivos JSON, argumentos de procesos o registros.
+Para esta prueba local se usa GitHub CLI ya autenticado y una configuracion
+local data/config/updater-local.json con ghExe (solo la ruta a gh.exe).
+El launcher no obtiene el token ni lo pasa por argumentos. No guardar claves
+en fuentes, paquetes, archivos JSON, argumentos de procesos o registros.
 Para distribucion a jugadores se debe elegir acceso individual o un servicio
 intermediario que autorice descargas; no repartir un token compartido.
 
-Antes de activar el canal: implementar el consumidor del manifiesto, validar
-firmas y hashes, rutas y compatibilidad, preparar un paquete inocuo y comprobar
-descarga e instalacion aisladas. Nunca probar sobre partidas del usuario.
+Verificado: comparacion de versiones, descarga privada, SHA-256, instalacion
+aislada, rechazo de rutas no permitidas y rollback ante un fallo inyectado.
+No se afirma que exista firma criptografica del paquete; la confianza del feed
+depende del acceso autenticado a este repositorio y del SHA-256 publicado.
+La actualizacion de mods y el acceso de jugadores aun no se han implementado.
 
 Los mods y recursos graficos no se incluyen en este repositorio.

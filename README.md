@@ -8,7 +8,7 @@ y sin version estable publicada.
 - `source/launcher-src`: fuentes del launcher actual.
 - `source/native`: fuentes nativas, configuracion y soporte CMake seleccionados.
 - `source/scripts`: parcheador del codigo generado y sus dependencias locales.
-- `updates/test`: propuesta de manifiesto de prueba, desactivada y sin paquetes.
+- `updates/test`: manifiesto activo de prueba para actualizar el launcher 0.1 a 0.2.
 
 No incluye el juego, mods, caras, kits, estadios, texturas, partidas,
 recursos visuales del launcher, instaladores ni credenciales.
@@ -26,11 +26,25 @@ para probar esta copia.
 
 ## Actualizaciones
 
-El launcher incluido todavia tiene desactivado el actualizador.
-`updates/test/manifest.json` no es un feed funcional ni una Release:
-su formato es provisional, `enabled` es `false` y no contiene paquetes.
-La autenticacion privada y la instalacion segura quedan por implementar.
+El launcher normal se compila como 0.1; `build-launcher.ps1 -UpdatePackage`
+genera 0.2. El feed de prueba en main apunta a un ZIP en la rama privada
+`update-test-packages`, fijado a un commit concreto y verificado por SHA-256.
+No se ha creado ninguna Release ni etiqueta estable.
+
+Este primer paquete solo reemplaza las cuatro copias del launcher, en la raiz
+y en bin. No instala mods ni modifica game, save o configuraciones.
+El helper espera el cierre del launcher, bloquea actualizaciones simultaneas
+y restaura los archivos anteriores si falla la copia.
+
+Para el repo privado se utiliza GitHub CLI ya autenticado. En este PC su ruta
+se configura localmente en `data/config/updater-local.json` con el campo
+`ghExe`. Esa configuracion no contiene tokens y no se sube al repositorio.
+La sesion de Chrome no autentica al launcher. Esta modalidad es para pruebas
+del desarrollador; el acceso para jugadores se debe definir por separado.
 Nunca distribuir un token compartido de GitHub dentro del launcher.
+
+Compilar el launcher: `powershell -File ./build-launcher.ps1`.
+Comprobar el flujo aislado: `powershell -File ./test-updater.ps1 -GitHubCli RUTA_A_GH`.
 
 ## Antes de publicar
 
