@@ -1,0 +1,31 @@
+#pragma once
+struct RealTeamName { uint32_t at,expected,shortExpected; const char* name; const char* abbreviation; };
+static constexpr RealTeamName real_team_names[]{
+{0x82d559e0u,0x820ac1a0u,0x820ac19cu,"Wigan Athletic","WIG"},
+{0x82d559c8u,0x820ac1bcu,0x820ac1b8u,"West Ham United","WHU"},
+{0x82d559b0u,0x820ac1d0u,0x820ac1ccu,"Watford","WAT"},
+{0x82d55998u,0x820ac1e4u,0x820ac1e0u,"Tottenham Hotspur","TOT"},
+{0x82d55980u,0x820ac1fcu,0x820ac1f8u,"Sheffield United","SHU"},
+{0x82d55968u,0x820ac214u,0x820ac210u,"Reading","REA"},
+{0x82d55950u,0x820ac22cu,0x820ac228u,"Portsmouth","POR"},
+{0x82d55938u,0x820ac238u,0x820ac234u,"Newcastle United","NEW"},
+{0x82d55920u,0x820ac248u,0x820ac244u,"Middlesbrough","MID"},
+{0x82d558f0u,0x820ac270u,0x820ac26cu,"Manchester City","MCI"},
+{0x82d558d8u,0x820ac280u,0x820ac27cu,"Liverpool","LIV"},
+{0x82d558c0u,0x820ac294u,0x820ac290u,"Fulham","FUL"},
+{0x82d558a8u,0x820ac2acu,0x820ac2a8u,"Everton","EVE"},
+{0x82d55890u,0x820ac2c4u,0x820ac2c0u,"Chelsea","CHE"},
+{0x82d55878u,0x820ac2d4u,0x820ac2d0u,"Charlton Athletic","CHA"},
+{0x82d55860u,0x820ac2f0u,0x820ac2ecu,"Bolton Wanderers","BOL"},
+{0x82d55848u,0x820ac304u,0x820ac300u,"Blackburn Rovers","BLA"},
+{0x82d55830u,0x820ac314u,0x820ac310u,"Aston Villa","AVL"},
+{0x82d56148u,0x820abbd0u,0x820abbccu,"RSC Anderlecht","AND"},
+{0x82d56160u,0x820abbc0u,0x820abbbcu,"Club Brugge KV","BRU"},
+{0x82d56178u,0x820abbb0u,0x820abbacu,"AC Sparta Praha","SPA"},
+{0x82d561d8u,0x820abb54u,0x820abb50u,"Panathinaikos","PAN"},
+{0x82d562b0u,0x820abab4u,0x820abab0u,"Beşiktaş JK","BES"},
+{0x82d562c8u,0x820abaa4u,0x820abaa0u,"Fenerbahçe SK","FEN"},
+{0x82d56310u,0x820aba6cu,0x820aba68u,"Boca Juniors","BOC"},
+{0x82d56328u,0x820aba60u,0x820aba5cu,"River Plate","RIV"},
+{0x82d56340u,0x820aba50u,0x820aba4cu,"São Paulo FC","SAO"}
+};

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "channel": "test",
+  "enabled": false,
+  "version": "0.0.0-test.1",
+  "packages": [],
+  "notes": "Preparacion del canal privado. Sin paquetes instalables. El launcher actual todavia no consume este formato."
+}

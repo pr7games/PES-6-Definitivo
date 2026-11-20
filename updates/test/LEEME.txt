@@ -1,0 +1,18 @@
+CANAL DE PRUEBA - NO ES UNA RELEASE
+
+manifest.json es una propuesta inicial, todavia no conectada al launcher.
+enabled=false y packages=[]: no hay actualizacion descargable ni instalable.
+La version 0.0.0-test.1 identifica esta preparacion, no una version del juego.
+
+Este repositorio es privado. La sesion de Chrome no autentica al launcher.
+Para una prueba local se puede suministrar una credencial individual mediante
+el almacen de credenciales del sistema. No guardarla en fuentes, paquetes,
+archivos JSON, argumentos de procesos o registros.
+Para distribucion a jugadores se debe elegir acceso individual o un servicio
+intermediario que autorice descargas; no repartir un token compartido.
+
+Antes de activar el canal: implementar el consumidor del manifiesto, validar
+firmas y hashes, rutas y compatibilidad, preparar un paquete inocuo y comprobar
+descarga e instalacion aisladas. Nunca probar sobre partidas del usuario.
+
+Los mods y recursos graficos no se incluyen en este repositorio.

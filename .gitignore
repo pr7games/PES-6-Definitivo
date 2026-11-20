@@ -1,0 +1,36 @@
+# Recursos del juego y mods: nunca incorporarlos al repositorio de fuentes.
+/game/
+/mods/
+/data/
+/save/
+/bin/
+/installer-assets/
+/source/installer-assets/
+/dist/
+**/dist/
+**/build/
+**/obj/
+**/node_modules/
+**/.vs/
+**/analysis/
+*.exe
+*.dll
+*.pdb
+*.xex
+*.iso
+*.img
+*.bundle
+*.we
+*.dds
+*.zip
+*.7z
+*.log
+.env
+.env.*
+*.pem
+*.key
+# No incluir automaticamente codigo derivado del ejecutable del juego.
+**/generated/default/
+# Notas locales de preparacion, fuera del contenido publicable.
+/PREPARACION.txt
+**/out/
