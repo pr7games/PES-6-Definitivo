@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -86,11 +86,11 @@ namespace PES6Installer {
             using (var author = new Font("Segoe UI", 10.5f, FontStyle.Bold)) {
                 format.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
                 float x = 0;
-                foreach (string part in new[] { "FIFA ", "08", " PORT PC" }) {
-                    e.Graphics.DrawString(part, Font, part == "08" ? red : white, x, 0, format);
+                foreach (string part in new[] { "PES ", "6", " DEFINITIVO" }) {
+                    e.Graphics.DrawString(part, Font, part == "6" ? red : white, x, 0, format);
                     x += e.Graphics.MeasureString(part, Font, PointF.Empty, format).Width;
                 }
-                e.Graphics.DrawString("  by PR7", author, red, x, Font.Height - author.Height, format);
+                e.Graphics.DrawString("  by Golazo Virtual", author, red, x, Font.Height - author.Height, format);
             }
         }
     }

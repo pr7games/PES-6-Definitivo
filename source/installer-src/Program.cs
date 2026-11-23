@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -43,7 +43,6 @@ namespace PES6Installer
         [STAThread]
         private static void Main(string[] args)
         {
-            if (args.Length == 3 && args[0] == "--install") { try { new InstallerEngine(ContentRoot).Install(args[1],args[2],false,CancellationToken.None); } catch(Exception e) { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"installer-error.txt"),e.ToString()); Environment.ExitCode=1; } return; }
             if (args.Length == 4 && args[0] == "--build-patches") { try { GamePatches.Build(args[1],args[2],args[3]); } catch(Exception e) { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"installer-build-error.txt"),e.ToString()); Environment.ExitCode=1; } return; }
             // Read-only package verification without opening the installer UI.
             if (args.Length == 2 && args[0] == "--extract-payload") {
@@ -57,10 +56,13 @@ namespace PES6Installer
                     ExtractEmbedded(Path.Combine(temporary, "payload"));
                     ContentRoot = temporary;
                 }
-                RunInstaller(args);
+                if (args.Length == 3 && args[0] == "--install") {
+                    new InstallerEngine(ContentRoot).Install(args[1],args[2],false,CancellationToken.None);
+                } else RunInstaller(args);
             } catch (Exception error) {
-                MessageBox.Show("No se pudo preparar el instalador / Unable to prepare installer.\n" + error.Message,
-                    "PES 6", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if(args.Length>0&&args[0]=="--install")File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"installer-error.txt"),error.ToString());
+                else MessageBox.Show("No se pudo preparar el instalador / Unable to prepare installer.\n" + error.Message,
+                    "PES 6 DEFINITIVO by Golazo Virtual", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Environment.ExitCode = 1;
             } finally {
                 if (temporary != null) { try { Directory.Delete(temporary, true); } catch { } }
@@ -129,7 +131,7 @@ namespace PES6Installer
             this.Size = new Size(860, 520);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.Text = "PES 6 - by PR7"; this.MinimizeBox=true; this.MaximizeBox=true;
+            this.Text = "PES 6 DEFINITIVO by Golazo Virtual"; this.MinimizeBox=true; this.MaximizeBox=true;
             this.DoubleBuffered = true;
             this.BackColor = Color.FromArgb(14, 14, 15); // Negro liso minimalista
 
@@ -229,7 +231,7 @@ namespace PES6Installer
             // 3. Destino (Destination Folder)
             AddSectionLabel("2. Carpeta de instalación en tu PC:", ctrlX, 178);
 
-            string defaultDest = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "PES 6 PC");
+            string defaultDest = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "PES 6 DEFINITIVO");
             txtDestination = CreateStyledTextBox(ctrlX, 200, ctrlWidth - 90);
             txtDestination.Text = defaultDest;
             this.Controls.Add(txtDestination);
@@ -911,7 +913,7 @@ namespace PES6Installer
                 token.ThrowIfCancellationRequested();
                 if (Directory.Exists(destination)) Directory.Delete(destination, false);
                 Directory.Move(staging, destination);
-                if (createShortcut) CreateDesktopShortcut(Path.Combine(destination, "PES 6 Launcher.exe"), Path.Combine(destination, "launcher-assets", "icon.ico"));
+                if (createShortcut) CreateDesktopShortcut(Path.Combine(destination, "PES 6 Launcher.exe"), Path.Combine(destination, "bin", "launcher-assets", "icon.ico"));
             } finally {
                 if (Directory.Exists(staging)) Directory.Delete(staging, true);
             }
@@ -1059,10 +1061,10 @@ namespace PES6Installer
             Fifa08Languages.Configure(gameDataDir,text.Code,commentaryCode,null);
             var serializer=new JavaScriptSerializer();
             File.WriteAllText(Path.Combine(destPath,"game-languages.json"),serializer.Serialize(languages));
-            var initialSettings=new Dictionary<string,object>{{"GraphicsApi","Vulkan"},{"Resolution","1080"},{"DisplayMode","window"},{"FrameLimit","60"},{"PostEffect","none"},{"TextLanguage",text.Code},{"CommentaryLanguage",commentaryCode},{"ShowFps",false},{"VSync",false}};
+            var initialSettings=new Dictionary<string,object>{{"GraphicsApi","Vulkan"},{"Resolution","1080"},{"DisplayMode","window"},{"FrameLimit","60"},{"PostEffect","none"},{"TextLanguage",text.Code},{"CommentaryLanguage",commentaryCode},{"ShowFps",false},{"VSync",false},{"ImprovedRain",false},{"ImprovedParticles",false},{"PlayerDirt",false},{"SoftCrowd",false},{"RealisticKits",false},{"NeuralRendering",false}};
             Directory.CreateDirectory(Path.Combine(destPath,"data","config"));
             File.WriteAllText(Path.Combine(destPath,"data","config","launcher-settings.json"),serializer.Serialize(initialSettings));
-            foreach(string folder in new[]{"mods","data","save"})Directory.CreateDirectory(Path.Combine(destPath,folder));
+            foreach(string folder in new[]{"data","save"})Directory.CreateDirectory(Path.Combine(destPath,folder));
             // Desktop shortcut
             if (createShortcut)
             {
@@ -1118,7 +1120,8 @@ namespace PES6Installer
                 token.ThrowIfCancellationRequested();
                 string relative=file.Substring(payload.Length).TrimStart(Path.DirectorySeparatorChar);
                 if(relative.StartsWith("game-patches"+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)) continue;
-                bool executable=relative.Equals("PES 6.exe",StringComparison.OrdinalIgnoreCase)||relative.Equals("PES 6 Launcher.exe",StringComparison.OrdinalIgnoreCase)||relative.Equals("PES 6 Editor.exe",StringComparison.OrdinalIgnoreCase);
+                string normalized=relative.Replace('\\','/');
+                if(normalized.StartsWith("save/",StringComparison.OrdinalIgnoreCase)||normalized.StartsWith("docs/",StringComparison.OrdinalIgnoreCase)||normalized.StartsWith("source/",StringComparison.OrdinalIgnoreCase)||normalized.StartsWith("bin/editor/",StringComparison.OrdinalIgnoreCase)||normalized.Equals("PES 6 Editor.exe",StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("El paquete contiene archivos excluidos de esta entrega: "+relative);
                 string target=Path.Combine(destDir,relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(target));
                 File.Copy(file,target,true);
@@ -1152,7 +1155,7 @@ namespace PES6Installer
             try
             {
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string shortcutPath = Path.Combine(desktop, "PES 6 PC.lnk");
+                string shortcutPath = Path.Combine(desktop, "PES 6 DEFINITIVO.lnk");
                 Type shellType = Type.GetTypeFromProgID("WScript.Shell");
                 if (shellType != null)
                 {
@@ -1160,7 +1163,7 @@ namespace PES6Installer
                     dynamic shortcut = shell.CreateShortcut(shortcutPath);
                     shortcut.TargetPath = targetExePath;
                     shortcut.WorkingDirectory = Path.GetDirectoryName(targetExePath);
-                    shortcut.Description = "PES 6 PC Port";
+                    shortcut.Description = "PES 6 DEFINITIVO by Golazo Virtual";
                     if (File.Exists(iconPath))
                     {
                         shortcut.IconLocation = iconPath + ",0";

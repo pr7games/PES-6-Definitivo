@@ -42,8 +42,8 @@ public class BrandHeader:Control {
   using(var whiteBrush=new SolidBrush(Color.FromArgb(225,225,230)))
   using(var sf=(StringFormat)StringFormat.GenericTypographic.Clone()){
    sf.FormatFlags|=StringFormatFlags.MeasureTrailingSpaces|StringFormatFlags.NoWrap;
-   string p1="by PR";
-   string p2="7";
+   string p1="by ";
+   string p2="Golazo Virtual";
    SizeF s1=g.MeasureString(p1,authorFont,PointF.Empty,sf);
    SizeF s2=g.MeasureString(p2,authorFont,PointF.Empty,sf);
    float totalW=s1.Width+s2.Width;

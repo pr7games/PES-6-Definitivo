@@ -21,9 +21,9 @@ namespace FIFA08Launcher {
  internal sealed class UpdateJob { public string Root; public string Stage; public UpdateManifest Manifest; public int Parent; public bool Restart=true; }
  internal static class PortUpdater {
 #if UPDATE_PACKAGE_BUILD
-  public const string CurrentVersion="0.3";
+  public const string CurrentVersion="0.3.1";
 #else
-  public const string CurrentVersion="0.2.1";
+  public const string CurrentVersion="0.3.1";
 #endif
   public const string Repository="https://github.com/pr7games/PES-6-Definitivo";
   public const string Feed="https://raw.githubusercontent.com/pr7games/PES-6-Definitivo/main/updates/latest.json";

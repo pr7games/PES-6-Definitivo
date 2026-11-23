@@ -1,6 +1,6 @@
 param([switch]$UpdatePackage, [string]$OutputDirectory, [string]$Icon)
 $ErrorActionPreference='Stop'
-if(-not $OutputDirectory){$OutputDirectory=Join-Path $PSScriptRoot ('dist\launcher-'+$(if($UpdatePackage){'0.3'}else{'0.2.1'}))}
+if(-not $OutputDirectory){$OutputDirectory=Join-Path $PSScriptRoot 'dist\launcher-0.3.1'}
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $sourceDir=Join-Path $PSScriptRoot 'source\launcher-src'

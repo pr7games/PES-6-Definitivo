@@ -79,12 +79,8 @@ class PcOverlay final : public rex::ui::ImGuiDialog {
       constexpr auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
           ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing;
       if (ImGui::Begin("FPS##pes6_pc", nullptr, flags)) {
-        const bool nr_active=pes6::nr::Active();
-        if(nr_active){
-          const auto nr_fps=pes6::nr::OutputFps();
-          if(nr_fps>0)ImGui::Text("FPS: %.1f",nr_fps);
-          else ImGui::TextUnformatted("FPS: --");
-        } else if (ready_) {
+        // Neural Rendering is reserved for a future release. Report game FPS.
+        if (ready_) {
           ImGui::Text("FPS: %.1f", gpu_available_ ? gpu_fps_ : fps_);
         } else {
           ImGui::TextUnformatted("FPS: --");
@@ -94,7 +90,6 @@ class PcOverlay final : public rex::ui::ImGuiDialog {
           return (v && *v) ? v : "Vulkan";
         }();
         ImGui::Text("API: %s", api);
-        ImGui::Text("NR: %s (F7)", nr_active ? "activo" : "inactivo");
         const auto scale = std::max(1u, pes6_render_scale.load(std::memory_order_relaxed));
         const auto width = pes6_frontbuffer_width.load(std::memory_order_relaxed);
         const auto height = pes6_frontbuffer_height.load(std::memory_order_relaxed);

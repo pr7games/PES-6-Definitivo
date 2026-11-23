@@ -1,4 +1,4 @@
-﻿using System;using System.Drawing;using System.Windows.Forms;using System.Collections.Generic;using System.IO;using System.Linq;using System.Web.Script.Serialization;
+using System;using System.Drawing;using System.Windows.Forms;using System.Collections.Generic;using System.IO;using System.Linq;using System.Web.Script.Serialization;
 namespace FIFA08Launcher {
  public partial class LauncherForm {
   Panel modernShell,modernBody,modernTabs;Panel[] modernPages;Button[] tabButtons;Control brand;ComboBox fsrQuality,anisotropy;CheckBox windowed,keyboard;Dictionary<string,TextBox> keyFields=new Dictionary<string,TextBox>();string extraFile;bool modernReady;AchievementForm embeddedAchievements;
@@ -56,7 +56,8 @@ namespace FIFA08Launcher {
 
    windowed=new RedCheckBox{Text="Modo ventana",Checked=cbDisplayMode.SelectedIndex==0,ForeColor=Color.White,Height=22};windowed.CheckedChanged+=(s,e)=>cbDisplayMode.SelectedIndex=windowed.Checked?0:1;graphics.Controls.Add(windowed);chkShowFps.Visible=true;graphics.Controls.Add(chkShowFps);chkVSync.Visible=true;graphics.Controls.Add(chkVSync);foreach(var check in new CheckBox[]{windowed,chkShowFps,chkVSync}){check.Height=22;check.Margin=new Padding(0,0,0,1);}
    var effects=Stack(modernPages[1]);
-   foreach(var check in new RedCheckBox[]{chkImprovedRain,chkImprovedParticles,chkRealisticKits,chkPlayerDirt,chkSoftCrowd,chkNeuralRendering}){check.Height=26;check.Margin=new Padding(0,2,0,3);check.ForeColor=Color.White;effects.Controls.Add(check);}
+   // Neural Rendering is reserved for a future release; implementation retained.
+   foreach(var check in new RedCheckBox[]{chkImprovedRain,chkImprovedParticles,chkRealisticKits,chkPlayerDirt,chkSoftCrowd}){check.Height=26;check.Margin=new Padding(0,2,0,3);check.ForeColor=Color.White;effects.Controls.Add(check);}
    graphics.Controls.Add(Caption("Filtro de imagen"));cbAntiAliasing.Visible=true;graphics.Controls.Add(cbAntiAliasing);var fsrHint=new Label{Height=20,ForeColor=Color.Gray,Font=new Font("Segoe UI",7.8f),Text=T2("FSR activo: FXAA se omite para conservar el detalle.","FSR active: FXAA is bypassed to preserve detail."),Margin=new Padding(0,0,0,1)};graphics.Controls.Add(fsrHint);Action refreshFsrFilter=()=>{bool active=fsrQuality.Enabled&&fsrQuality.SelectedIndex>0;cbAntiAliasing.Enabled=!active;fsrHint.Visible=active;fsrHint.Text=T2("FSR activo: FXAA se omite para conservar el detalle.","FSR active: FXAA is bypassed to preserve detail.");};fsrQuality.SelectedIndexChanged+=(s,e)=>refreshFsrFilter();cbResolution.SelectedIndexChanged+=(s,e)=>refreshFsrFilter();refreshFsrFilter();
    graphics.Controls.Add(Caption("Filtrado de texturas"));anisotropy=new RoundedComboBox{DropDownStyle=ComboBoxStyle.DropDownList};anisotropy.Items.AddRange(new object[]{"Original","Off","2×","4×","8×","16×"});anisotropy.SelectedIndex=0;graphics.Controls.Add(anisotropy);
 
@@ -128,18 +129,18 @@ namespace FIFA08Launcher {
   }
   void SetUpdateAvailable(string version){availableVersion=version;updateAvailable=!string.IsNullOrEmpty(version);RefreshAbout();}
   void RefreshAbout(){if(aboutDetails==null)return;tabButtons[5].Text=T2("Acerca de","About");aboutDetails.Text=T2(
-   @"PES 6 PC Port
+   @"PES 6 DEFINITIVO
 Version {VERSION}
-Desarrollado por PR7
+Desarrollado por Golazo Virtual
 
 Proyecto independiente, sin afiliacion con Konami, Microsoft, Sony ni AMD. Requiere una copia original compatible de Xbox 360; el instalador no incluye el juego.
 
 Utiliza componentes de codigo abierto: ReXGlue, Xenia y FidelityFX FSR, entre otros. Cada componente conserva su licencia y sus avisos.
 
 PES, Konami, las marcas, imagenes, musica y recursos del juego pertenecen a sus titulares. El software se ofrece sin garantias; consulta los avisos y licencias incluidos.",
-   @"PES 6 PC Port
+   @"PES 6 DEFINITIVO
 Version {VERSION}
-Developed by PR7
+Developed by Golazo Virtual
 
 Independent project, not affiliated with Konami, Microsoft, Sony or AMD. Requires a compatible original Xbox 360 copy; game files are not included in the installer.
 

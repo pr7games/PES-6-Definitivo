@@ -1,25 +1,35 @@
-# PES 6 Definitivo
+# PES 6 DEFINITIVO by Golazo Virtual
 
-Port para PC de PES 6 Xbox 360, por PR7.
+Port para Windows de PES 6 Xbox 360. Proyecto independiente, no oficial. Entrega preliminar.
+
+## Instalacion limpia - 0.3.1
+
+1. Descarga [PES6-DEFINITIVO-Setup-0.3.1.exe](https://github.com/pr7games/PES-6-Definitivo/releases/download/v0.3.1/PES6-DEFINITIVO-Setup-0.3.1.exe). Es un unico EXE; no requiere una carpeta payload aparte.
+2. Prepara tu copia original compatible de PES 6 para Xbox 360: ISO, carpeta GOD o archivos originales extraidos. El instalador no proporciona esa copia.
+3. Ejecuta el instalador, selecciona el origen y elige una **carpeta de destino vacia**. No uses la carpeta de tu juego original ni sobrescribas una instalacion existente.
+4. Pulsa **INSTALAR PES 6** y espera a que termine. Puedes crear un acceso directo.
+5. Abre **PES 6 Launcher.exe**, elige Vulkan, D3D12 o Nativo y configura resolucion, idiomas y controles. Las mejoras opcionales empiezan desactivadas; puedes activarlas en Graficos.
+
+Incluye el runtime y los mods activos necesarios. No incluye partidas, editor externo, documentacion interna ni Neural Rendering. Su codigo se conserva para futuras versiones. La carpeta save se crea vacia para tus partidas nuevas.
+
+El instalador comprueba la copia original y aplica parches para preparar los archivos del juego. Una imagen incompatible o previamente modificada puede ser rechazada. El contenido instalado depende de la copia compatible aportada por el usuario.
 
 ## Actualizaciones
 
-Descarga los paquetes desde **Releases** o utiliza **Acerca de → Buscar actualizaciones** en el launcher. El acceso es publico: no necesitas Git, GitHub CLI ni una cuenta de GitHub.
+En el launcher utiliza **Acerca de > Buscar actualizaciones**. Las descargas son publicas: no necesitas cuenta de GitHub, Git ni GitHub CLI. El launcher muestra progreso, verifica SHA-256 y conserva partidas y preferencias. Cierra el juego antes de actualizar.
 
-Si tienes el launcher de prueba 0.1/0.2, su actualizacion puente 0.2.1 habilita el canal publico. Tambien puedes copiar el contenido de `PES6-Launcher-0.2.1.zip` sobre tu instalacion existente, con el juego y launcher cerrados. Despues actualiza a 0.3 desde el launcher.
+El instalador 0.3.1 es para instalaciones limpias. El canal automatico conserva por ahora la actualizacion 0.3; no se cambiara a 0.3.1 hasta publicar un paquete compatible para instalaciones existentes. Un launcher 0.3.1 no baja a 0.3.
 
-El launcher descarga todas las partes necesarias, comprueba sus SHA-256 y aplica la actualizacion al cerrarse. Incluye recursos de juego y mods activos; conserva partidas y preferencias. Las bases de archivos del juego deben coincidir con una version soportada: si no coinciden, la instalacion se detiene antes de reemplazar archivos.
+Los launchers antiguos 0.1/0.2 reciben primero el puente 0.2.1. Si un parche indica que cv.img u otro archivo no coincide, la instalacion se detiene: esa base no esta soportada. Puedes realizar una instalacion limpia en otra carpeta y conservar aparte tus partidas. No reemplaces archivos de juego al azar para saltarte la comprobacion.
 
-La version 0.3 es una entrega preliminar. No incluye el editor externo. El editor integrado del juego permanece disponible.
+Las partes ZIP de la release 0.3 son paquetes del actualizador, no el instalador inicial. Para instalar desde cero usa el EXE 0.3.1.
 
-## Fuentes
+## Integridad
 
-`source/launcher-src`, `source/native`, `source/runtime` y `source/scripts` contienen el codigo seleccionado del port. `source/installer-src` conserva el codigo del instalador, sin sus datos de juego. El codigo generado desde el ejecutable original y los compiladores no se incluyen.
+El archivo `.exe.sha256` de la misma release permite verificar la descarga. En PowerShell: `Get-FileHash -Algorithm SHA256 'PES6-DEFINITIVO-Setup-0.3.1.exe'`. Compara el resultado con el checksum publicado.
 
-El launcher se compila en Windows con `powershell -File build-launcher.ps1`; `-UpdatePackage` genera la version publicada. El motor requiere ReXGlue SDK 0.10.0, Clang, CMake, Ninja, Node.js y la generacion local desde una copia compatible del juego. Los scripts nativos conservan rutas de herramientas que deben ajustarse al entorno de desarrollo.
+## Fuentes y avisos
 
-`updates/latest.json` es el manifiesto publico del actualizador. Los ZIP descargables estan en Releases; no se guardan los mods como historial de Git.
+Las fuentes seleccionadas estan en source. El codigo generado desde el ejecutable del juego y las herramientas de compilacion no se incluyen. Para compilar el launcher: `powershell -File build-launcher.ps1`. El motor requiere ReXGlue SDK 0.10.0, Clang, CMake, Ninja, Node.js y generacion local desde la copia compatible del juego; ajusta las rutas de herramientas de los scripts.
 
-Para preparar futuras entregas, `source/scripts/package-public-update.ps1` selecciona el runtime y admite un inventario anterior para retirar recursos obsoletos. `source/scripts/build-game-update.cjs` genera parches por bloques y admite una carpeta de juego de la version anterior. Cada nueva entrega debe publicar una version superior y sus paquetes antes de actualizar el manifiesto.
-
-No se incluyen ISO/GOD, partidas, credenciales, archivos maestros de edicion, respaldos, pruebas ni documentacion interna. Los recursos originales de PES y las marcas pertenecen a sus respectivos titulares. Las dependencias conservan sus avisos y licencias. La publicacion de estas fuentes no concede derechos sobre recursos de terceros; aun no se ha definido una licencia general para el codigo propio.
+Consulta [LEGAL.md](LEGAL.md), [NOTICE.txt](NOTICE.txt) y las licencias conservadas junto a las dependencias. La publicacion de fuentes no equivale por si sola a conceder una licencia open source; aun no se ha elegido una licencia general para el codigo propio.

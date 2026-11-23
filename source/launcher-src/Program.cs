@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -953,7 +953,7 @@ namespace FIFA08Launcher
             this.Size = new Size(950, 720);
             this.MinimumSize = new Size(880, 640);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.Text = "PES 6 PC PORT by PR7";
+            this.Text = "PES 6 DEFINITIVO by Golazo Virtual";
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
             this.MinimizeBox = true;
@@ -1232,11 +1232,11 @@ namespace FIFA08Launcher
                 g.DrawString("6", fontTitle, brushRed, curX, titleY, sf);
                 curX += g.MeasureString("6", fontTitle, PointF.Empty, sf).Width;
 
-                g.DrawString(" PORT PC LAUNCHER", fontTitle, brushWhite, curX, titleY, sf);
-                curX += g.MeasureString(" PORT PC LAUNCHER", fontTitle, PointF.Empty, sf).Width;
+                g.DrawString(" DEFINITIVO", fontTitle, brushWhite, curX, titleY, sf);
+                curX += g.MeasureString(" DEFINITIVO", fontTitle, PointF.Empty, sf).Width;
 
                 float authorY = titleY + (fontTitle.Height - fontAuthor.Height);
-                g.DrawString("  by PR7", fontAuthor, brushRed, curX, authorY, sf);
+                g.DrawString("  by Golazo Virtual", fontAuthor, brushRed, curX, authorY, sf);
             }
         }
 
@@ -1278,7 +1278,8 @@ namespace FIFA08Launcher
                 chkPlayerDirt.Checked=value("PlayerDirt",legacyEffects).Equals("True",StringComparison.OrdinalIgnoreCase);
                 chkSoftCrowd.Checked=value("SoftCrowd","False").Equals("True",StringComparison.OrdinalIgnoreCase);
                 chkRealisticKits.Checked = value("RealisticKits", "false").Equals("True", StringComparison.OrdinalIgnoreCase);
-                chkNeuralRendering.Checked = value("NeuralRendering", "false").Equals("True", StringComparison.OrdinalIgnoreCase);
+                // Disabled for this release, including preferences from older builds.
+                chkNeuralRendering.Checked = false;
                 achievementPopup=value("AchievementPopup","true").Equals("True",StringComparison.OrdinalIgnoreCase);
                 achievementSound=value("AchievementSound","true").Equals("True",StringComparison.OrdinalIgnoreCase);
             }
@@ -1402,7 +1403,7 @@ namespace FIFA08Launcher
 
         private void GameMonitorTimer_Tick(object sender, EventArgs e)
         {
-            if (runningGameProcess != null && !runningGameProcess.HasExited) RefreshNeuralRenderingStatus();
+            if (chkNeuralRendering.Checked && runningGameProcess != null && !runningGameProcess.HasExited) RefreshNeuralRenderingStatus();
             if (runningGameProcess == null || runningGameProcess.HasExited)
             {
                 gameMonitorTimer.Stop();

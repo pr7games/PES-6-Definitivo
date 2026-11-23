@@ -32,6 +32,22 @@ extern "C" __declspec(dllexport) pes6::ui_tools::ColorPickerState* Pes6GetColorP
 
 void Pr7OverlayPaint(){
  if(!ImGui::GetCurrentContext())return;
+ // The third-party native host owns its window. Apply the same public title
+ // as the recompiled Vulkan/D3D12 host without changing its executable layout.
+ static ULONGLONG last_title_check=0;
+ const auto title_now=GetTickCount64();
+ if(title_now-last_title_check>=2000){
+  last_title_check=title_now;
+  EnumWindows([](HWND hwnd,LPARAM)->BOOL{
+   DWORD pid=0;GetWindowThreadProcessId(hwnd,&pid);
+   if(pid==GetCurrentProcessId()&&IsWindowVisible(hwnd)&&GetWindow(hwnd,GW_OWNER)==nullptr){
+    const wchar_t* title=L"PES 6 DEFINITIVO by Golazo Virtual";
+    wchar_t current[256]{};GetWindowTextW(hwnd,current,256);
+    if(lstrcmpW(current,title)!=0)SetWindowTextW(hwnd,title);
+    return FALSE;
+   }return TRUE;
+  },0);
+ }
  // ReXApp registers its default shortcuts before the first UI frame.
  // Leave F7 available to the external Neural Rendering supervisor.
  static const bool shortcuts_ready=[](){rex::ui::UnregisterBind("bind_achievements");return true;}();

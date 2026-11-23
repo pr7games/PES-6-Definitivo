@@ -32,7 +32,7 @@ class Pes6App : public rex::ReXApp {
 
   static std::unique_ptr<rex::ui::WindowedApp> Create(
       rex::ui::WindowedAppContext& ctx) {
-    return std::unique_ptr<Pes6App>(new Pes6App(ctx, "PES 6 PC PORT by PR7",
+    return std::unique_ptr<Pes6App>(new Pes6App(ctx, "PES 6 DEFINITIVO by Golazo Virtual",
         PPCImageConfig));
   }
 
@@ -87,7 +87,7 @@ class Pes6App : public rex::ReXApp {
   void OnPostSetup() override {
     pes6_start_timing();
     pes6_render_scale.store(REXCVAR_QUERY(int32_t, draw_resolution_scale_x));
-    window()->SetTitle("PES 6 PC PORT by PR7");
+    window()->SetTitle("PES 6 DEFINITIVO by Golazo Virtual");
 #if defined(_WIN32)
     if (HWND hwnd = static_cast<HWND>(window()->GetNativeWindowHandle())) {
       HICON icon_big = (HICON)LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1),
@@ -108,7 +108,7 @@ class Pes6App : public rex::ReXApp {
         SendMessageW(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon_big));
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon_big));
       }
-      SetWindowTextW(hwnd, L"PES 6 PC PORT by PR7");
+      SetWindowTextW(hwnd, L"PES 6 DEFINITIVO by Golazo Virtual");
     }
 #endif
     REXLOG_INFO("PES6 presentation: effect={}, scale={}x{}, vsync={}",

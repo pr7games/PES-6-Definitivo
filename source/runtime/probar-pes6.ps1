@@ -78,7 +78,9 @@ $env:PES6_PLAYER_DIRT = if ($isPlayerDirt) { '1' } else { '0' }
 $env:PES6_SOFT_CROWD = if ($isSoftCrowd) { '1' } else { '0' }
 $isRealisticKits = ($RealisticKits -eq $true -or [string]$RealisticKits -in @('1','true','True','$true'))
 $env:PES6_REALISTIC_KITS = if ($isRealisticKits) { '1' } else { '0' }
-$isNeuralRendering = ($NeuralRendering -eq $true -or [string]$NeuralRendering -in @('1','true','True','$true'))
+# Reserved for a future release; retain the implementation without activating it.
+$NeuralRendering = $false
+$isNeuralRendering = $false
 $env:PES6_TEXT_LANG = $TextLanguage
 $env:PES6_COMM_LANG = if ($CommentaryLanguage -eq 'original') { $TextLanguage } else { $CommentaryLanguage }
 
