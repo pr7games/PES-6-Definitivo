@@ -30,4 +30,24 @@ inline bool LetteringResource(PPCContext& ctx,uint8_t* base,bool numbers){
 inline bool LetteringRecolor(uint32_t descriptor,bool numbers){
  std::array<int,9> x;if(!LetteringSpec(descriptor,x))return false;if(numbers)return x[2]>=0||x[3]>=0||x[4]>=0||x[5]>=0;return x[x[8]?2:6]>=0||x[x[8]?3:7]>=0;
 }
+inline void RecolorTexture256(uint8_t* base,uint32_t tex,uint32_t descriptor,unsigned colorOff){
+ if(!Readable(base,tex,12)||!Readable(base,descriptor,colorOff+2))return;
+ const uint32_t pal=U32(base,tex+8);if(!Readable(base,pal,1024))return;
+ const unsigned word=(unsigned(base[descriptor+colorOff])<<8)|base[descriptor+colorOff+1];
+ const uint8_t r=uint8_t(((word>>11)&31u)*255u/31u);
+ const uint8_t g=uint8_t(((word>>6)&31u)*255u/31u);
+ const uint8_t b=uint8_t(((word>>1)&31u)*255u/31u);
+ for(unsigned i=0;i<256;i++){
+  const uint32_t at=pal+i*4;
+  if(base[at+3]==0)continue;
+  base[at]=r;base[at+1]=g;base[at+2]=b;
+ }
+}
+inline bool LetteringNativo(uint8_t* base,uint32_t descriptor,uint32_t texA,uint32_t texB,bool numbers){
+ std::array<int,9> x;if(!LetteringSpec(descriptor,x))return false;
+ if(x[numbers?0:1]<1000||!LetteringRecolor(descriptor,numbers))return false;
+ if(numbers){RecolorTexture256(base,texA,descriptor,68);RecolorTexture256(base,texB,descriptor,76);}
+ else{RecolorTexture256(base,texA,descriptor,60);}
+ return true;
+}
 }

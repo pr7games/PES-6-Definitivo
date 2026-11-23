@@ -1083,9 +1083,22 @@ std::vector<std::pair<std::string, std::string>> TeamRows(PPCContext &ctx, uint8
     for (unsigned i = 0; i < 21; i++) {
       const auto value = e.colors[e.variant][i];
       const auto color = value >= 0 ? unsigned(value) : OriginalKitColor(i);
-      rows.emplace_back(labels[i], std::to_string(color >> 11 & 31) + " / " +
-                                       std::to_string(color >> 6 & 31) + " / " +
-                                       std::to_string(color >> 1 & 31));
+      const unsigned r5 = (color >> 11) & 31, g5 = (color >> 6) & 31, b5 = (color >> 1) & 31;
+      const unsigned r8 = (r5 * 255 + 15) / 31, g8 = (g5 * 255 + 15) / 31, b8 = (b5 * 255 + 15) / 31;
+      const char *cname = "Color";
+      if (r5 <= 3 && g5 <= 3 && b5 <= 3) cname = "Negro";
+      else if (r5 >= 27 && g5 >= 27 && b5 >= 27) cname = "Blanco";
+      else if (std::abs(int(r5) - int(g5)) <= 3 && std::abs(int(g5) - int(b5)) <= 3) cname = "Gris";
+      else if (r5 >= g5 + 8 && r5 >= b5 + 8) cname = g5 >= 14 ? "Naranja" : "Rojo";
+      else if (r5 >= 20 && g5 >= 20 && b5 <= 10) cname = "Amarillo";
+      else if (g5 >= r5 + 6 && g5 >= b5 + 4) cname = "Verde";
+      else if (b5 >= r5 + 6 && b5 >= g5 + 4) cname = (r5 >= 10 && g5 >= 16) ? "Celeste" : "Azul";
+      else if (r5 >= 16 && b5 >= 16 && g5 <= 10) cname = "Morado";
+      else if (r5 >= 20 && g5 >= 12 && b5 >= 16) cname = "Rosa";
+      char hex[16];
+      std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", r8, g8, b8);
+      rows.emplace_back(labels[i], std::string(cname) + " " + hex + " (" + std::to_string(r5) + "/" +
+                                       std::to_string(g5) + "/" + std::to_string(b5) + ")");
     }
     break;
   }
@@ -3123,6 +3136,45 @@ extern "C" bool pes6_native_team_update(PPCContext &ctx, uint8_t *base) {
     } else
       TeamPageTo(TeamPage::Menu);
   } else if (e.page == TeamPage::Text) {
+    // PC keyboard input support alongside controller D-pad.
+    static std::array<bool, 256> prev_keys{};
+    const auto key_pressed = [&](int vk) {
+      const bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+      const bool edge = down && !prev_keys[vk];
+      prev_keys[vk] = down;
+      return edge;
+    };
+    const size_t max_len = e.short_edit ? 8 : 63;
+    const bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    for (int vk = 'A'; vk <= 'Z'; vk++) {
+      if (key_pressed(vk) && e.edit_text.size() < max_len) {
+        e.edit_text.push_back(char(shift ? vk : (vk + 32)));
+        e.character = unsigned(std::max<size_t>(1, TeamCharacters(e.edit_text).size()) - 1);
+      }
+    }
+    for (int vk = '0'; vk <= '9'; vk++) {
+      if (key_pressed(vk) && e.edit_text.size() < max_len) {
+        e.edit_text.push_back(char(vk));
+        e.character = unsigned(std::max<size_t>(1, TeamCharacters(e.edit_text).size()) - 1);
+      }
+    }
+    if (key_pressed(VK_SPACE) && e.edit_text.size() < max_len) {
+      e.edit_text.push_back(' ');
+      e.character = unsigned(std::max<size_t>(1, TeamCharacters(e.edit_text).size()) - 1);
+    }
+    if (key_pressed(VK_OEM_MINUS) && e.edit_text.size() < max_len) {
+      e.edit_text.push_back('-');
+      e.character = unsigned(std::max<size_t>(1, TeamCharacters(e.edit_text).size()) - 1);
+    }
+    if (key_pressed(VK_OEM_PERIOD) && e.edit_text.size() < max_len) {
+      e.edit_text.push_back('.');
+      e.character = unsigned(std::max<size_t>(1, TeamCharacters(e.edit_text).size()) - 1);
+    }
+    if (key_pressed(VK_BACK) && !e.edit_text.empty()) {
+      auto ls = TeamCharacters(e.edit_text);
+      if (!ls.empty()) { ls.pop_back(); TeamJoinCharacters(ls); }
+      e.character = unsigned(ls.empty() ? 0 : ls.size() - 1);
+    }
     auto letters = TeamCharacters(e.edit_text);
     const bool left = TeamInput(ctx, base, 2, true), right = TeamInput(ctx, base, 3, true);
     if (left && e.character)

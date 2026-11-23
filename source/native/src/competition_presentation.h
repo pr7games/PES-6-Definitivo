@@ -48,10 +48,12 @@ inline bool Decode(PPCContext& ctx,uint8_t* base){
 // The commercial builder reads WE panels directly (821608E8), bypassing the
 // normal GPU texture constructor. Preserve its original allocation/free pair.
 inline uint32_t Image(PPCContext& ctx,uint8_t* base,uint32_t source,bool panel){
- const int id=Current(base);if(id<0||!Readable(base,source,16)||std::memcmp(base+source,"WE00",4))return source;
+ const int id=Current(base);if(!Readable(base,source,16)||std::memcmp(base+source,"WE00",4))return source;
  const unsigned texture=REX_LOAD_U16(source+4);if(!panel&&texture!=25009&&texture!=25014&&texture!=41220)return source;
  struct Row{int id;char kind;unsigned texture;std::string file;};static const auto rows=[](){std::vector<Row> r;std::ifstream in(Root()/"images.txt");Row x;while(in>>x.id>>x.kind>>x.texture>>x.file)if(Filename(x.file)&&(x.kind=='P'||x.kind=='K'))r.push_back(x);return r;}();
- for(const auto& row:rows)if(row.id==id&&row.texture==texture&&row.kind==(panel?'P':'K')){
+ // Global commercial rows (-1/P) also cover exhibition and Master League.
+ // Imported atlas overrides remain strictly competition-specific.
+ for(const auto& row:rows)if((row.id==id||(panel&&row.id==-1))&&row.texture==texture&&row.kind==(panel?'P':'K')){
   static std::mutex mutex;struct Cached{uint32_t guest=0;std::vector<uint8_t> bytes;};static std::map<std::string,Cached> cache;std::lock_guard lock(mutex);auto& c=cache[row.file];
   if(c.bytes.empty()){std::ifstream in(Root()/"images"/row.file,std::ios::binary|std::ios::ate);if(!in||in.tellg()<16||in.tellg()>16000000)return source;c.bytes.resize(size_t(in.tellg()));in.seekg(0);in.read(reinterpret_cast<char*>(c.bytes.data()),c.bytes.size());if(!in||!Readable(base,source,16)||std::memcmp(c.bytes.data(),base+source,16)){c.bytes.clear();return source;}}
   if(std::memcmp(c.bytes.data(),base+source,16))return source;

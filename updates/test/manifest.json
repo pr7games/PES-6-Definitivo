@@ -1,10 +1,10 @@
 {
-    "schemaVersion":  1,
+    "size":  762894,
     "channel":  "test",
-    "enabled":  true,
-    "version":  "0.2",
     "packagePath":  "updates/test/packages/pes6-launcher-0.2.zip",
-    "packageRef":  "35ff415663a6006027c2cb8f8d3118ff24353e78",
-    "sha256":  "459c22716a828bd5d36bbee5799159a35a86392de78be9429804103ed6520fba",
-    "size":  234798
+    "packageRef":  "092e9ff5b0f957d8571c0e35c4e03ac61a65ba7a",
+    "version":  "0.2.1",
+    "enabled":  true,
+    "schemaVersion":  1,
+    "sha256":  "31accd9324f8b035c15dc2cdf663c594f24b534967d953ffec98c20e26938dbe"
 }

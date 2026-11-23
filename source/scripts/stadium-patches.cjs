@@ -166,6 +166,24 @@ function patchStadium(source){
     const decl=`extern "C" ${type} pes6_stadium_${name}(PPCContext&,uint8_t*);`;
     if(source.includes(`pes6_stadium_${name}(ctx,base)`)&&!source.includes(decl))source=decl+'\n'+source;
   }
+  // Enhanced native net deformation and Wembley-only crowd tone.
+  for(const [address,call,decl] of [
+    ['82170030','pes6_native_net_rest(base,ctx.r3.u32);','extern "C" void pes6_native_net_rest(uint8_t*,uint32_t);'],
+    ['8216E190','pes6_native_net_upload(ctx,base);','extern "C" void pes6_native_net_upload(PPCContext&,uint8_t*);'],
+    ['8216C190','pes6_wembley_crowd_color(ctx,base,false);','extern "C" void pes6_wembley_crowd_color(PPCContext&,uint8_t*,bool);'],
+    ['8216C3A0','pes6_wembley_crowd_color(ctx,base,true);','extern "C" void pes6_wembley_crowd_color(PPCContext&,uint8_t*,bool);']
+  ]){
+    const start=source.indexOf('DEFINE_REX_FUNC(sub_'+address+') {');if(start<0)continue;
+    const end=source.indexOf('\n}\n',start);let fn=source.slice(start,end);
+    if(!fn.includes(call)){
+      if(address==='82170030')fn=fn.replace('// addi r1,r1,128',''+call+'\n\t// addi r1,r1,128');
+      else if(address==='8216E190')fn=fn.replace('sub_82195A80(ctx, base);',call);
+      else fn=fn.replace('REX_FUNC_PROLOGUE();','REX_FUNC_PROLOGUE();\n\t'+call);
+      if(!fn.includes(call))throw Error('Native net/crowd anchor '+address);
+      source=source.slice(0,start)+fn+source.slice(end);
+    }
+    if(!source.includes(decl))source=decl+'\n'+source;
+  }
   // Restore the original native net renderer after retiring imported nets.
   {
     const start=source.indexOf('DEFINE_REX_FUNC(sub_8216E190) {');
@@ -328,7 +346,7 @@ function patchStadium(source){
   }
   {
     const start=source.indexOf('DEFINE_REX_FUNC(sub_82153018) {'),end=source.indexOf('\n}\n',start);
-    if(start>=0){const fn=source.slice(start,end);if(fn.includes('if(ctx.r11.u32==8)ctx.r11.u64=0;'))source=source.slice(0,start)+fn.replace('if(ctx.r11.u32==8)ctx.r11.u64=0;','if(ctx.r11.u32==8||ctx.r11.u32==10)ctx.r11.u64=0;')+source.slice(end);}
+    if(start>=0){const fn=source.slice(start,end);if(fn.includes('if(ctx.r11.u32==8)ctx.r11.u64=0;'))source=source.slice(0,start)+fn.replace('if(ctx.r11.u32==8)ctx.r11.u64=0;','if(ctx.r11.u32==8)ctx.r11.u64=0;else if(ctx.r11.u32==10)ctx.r11.u64=4;')+source.slice(end);}
   }
   for(const a of ['8217C810','8217C910'])current(a,fn=>fn.replace('REX_STORE_U8(ctx.r31.u32+44,9);','REX_STORE_U8(ctx.r31.u32+44,8);'));
   current('826F94D0',fn=>fn.replace('ctx.r31.u64 = ctx.r4.u64;','ctx.r31.u64 = pes6_stadium_time_row(ctx.r4.u32);'));
@@ -424,7 +442,7 @@ function patchStadium(source){
     const start=source.indexOf('DEFINE_REX_FUNC(sub_826F9C68) {'),end=source.indexOf('\n}\n',start);
     if(start>=0){let fn=source.slice(start,end);
       fn=fn.replaceAll('if(REX_LOAD_U8(ctx.r3.u32+182)>9)REX_STORE_U8(ctx.r3.u32+182,9);','if(REX_LOAD_U8(ctx.r3.u32+182)>10)REX_STORE_U8(ctx.r3.u32+182,10);');
-      fn=fn.replace(/(\/\/ PES6 Konami preview v2\r?\n)[^\n]+/g,'$1\tif(ctx.r10.u32==0||ctx.r10.u32==9)ctx.r30.u64=10;else if(ctx.r10.u32==10)ctx.r30.u64=8;');
+      fn=fn.replace(/(\/\/ PES6 Konami preview v2\r?\n)[^\n]+/g,'$1\tif(ctx.r10.u32==0)ctx.r30.u64=10;else if(ctx.r10.u32==9)ctx.r30.u64=11;else if(ctx.r10.u32==10)ctx.r30.u64=8;');
       fn=fn.replace('ctx.cr6.compare<uint32_t>(ctx.r10.u32, 9, ctx.xer);','ctx.cr6.compare<uint32_t>(ctx.r10.u32, 10, ctx.xer);');
       fn=fn.replace('ctx.r3.u64 = ctx.r30.u32==10?8:ctx.r30.u64;','ctx.r3.u64 = REX_LOAD_U8(pes6_stadium_table(ctx,base,0)+REX_LOAD_U8(ctx.r31.u32+182));');
       source=source.slice(0,start)+fn+source.slice(end);

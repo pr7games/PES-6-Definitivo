@@ -1,3 +1,4 @@
+extern "C" bool pes6_keyboard_active();
 #include "boot_catalog.h"
 #include "../generated/default/pes6_pch.h"
 #include "../generated/default/pes6_funcs.h"
@@ -287,7 +288,8 @@ std::vector<Accessory> Items(const Snapshot& s){
       if(editor.page==Page::Appearance&&!hair&&!face)result.push_back(item);
       if(editor.page==Page::FaceDetail&&face){
         const auto field=FindFaceField(item.id);
-        const unsigned group=field==face_fields.end()?0:field->group;
+        const auto component=FindFaceComponentType(item.id);
+        const unsigned group=component!=face_component_types.end()?component->group:field==face_fields.end()?0:field->group;
         if(group==editor.face_group)result.push_back(item);
       }
     }
@@ -1010,7 +1012,10 @@ extern "C" bool pes6_native_editor_update(PPCContext& ctx,uint8_t* base){
     preview::Container(editor.scenes[0].root);preview::Frame(6);
     const auto form=Native(ctx,base,sub_8272F650,editor.original,1);
     const int selected=Valid(base,form,482)?int16_t(REX_LOAD_U16(form+478))*int16_t(REX_LOAD_U16(form+476))+int16_t(REX_LOAD_U16(form+480)):-1;
-    preview::Visible(!REX_LOAD_U32(editor.owner+196)&&!base[editor.owner+225]);
+    // Text entry keeps the preview behind the bottom keyboard.
+    const bool textEntry=pes6_keyboard_active();
+    if(textEntry)Visibility(base);
+    preview::Visible(textEntry||(!REX_LOAD_U32(editor.owner+196)&&!base[editor.owner+225]));
     if(REX_LOAD_U32(editor.owner+196)==5){
       Apply({Action::Information,editor.player,ReadCatalog()->generation,"nationality",0});
       RefreshNativeCatalog(base);

@@ -9,12 +9,20 @@ inline float ThighGap(Vec p,Vec hip,Vec knee,Vec right,float scale=1){
  const auto d=p-(hip+axis*t);const float rx=(.092f-.010f*t)*scale,rz=(.110f-.015f*t)*scale;
  const float x=Dot(d,right)/rx,z=Dot(d,forward)/rz;return (std::sqrt(x*x+z*z)-1)*std::min(rx,rz);
 }
-inline void ProjectThigh(Vec& p,Vec hip,Vec knee,Vec right){
- const auto axis=knee-hip;const float length2=Dot(axis,axis);if(length2<.04f)return;
- const float t=std::clamp(Dot(p-hip,axis)/length2,0.f,1.f);const auto up=Unit(hip-knee),forward=Unit(Cross(right,up),{0,0,1});right=Unit(Cross(up,forward),{1,0,0});
- const auto centre=hip+axis*t,d=p-centre;const float rx=.088f-.007f*t,rz=.104f-.012f*t,x=Dot(d,right)/rx,z=Dot(d,forward)/rz,n=std::sqrt(x*x+z*z);
- if(n<1){const float q=n>.001f?1/n:0;p=centre+right*(x*rx*q)+forward*(n>.001f?z*rz*q:rz);}
-}
+// The collider basis is constant throughout a pose's constraint iterations.
+struct ThighProjector {
+ Vec hip{},axis{},right{},forward{};float length2=0;
+ ThighProjector(Vec h,Vec knee,Vec r):hip(h),axis(knee-h){
+  length2=Dot(axis,axis);if(length2<.04f)return;
+  const auto up=Unit(hip-knee);forward=Unit(Cross(r,up),{0,0,1});right=Unit(Cross(up,forward),{1,0,0});
+ }
+ void Project(Vec& p)const{
+  if(length2<.04f)return;const float t=std::clamp(Dot(p-hip,axis)/length2,0.f,1.f);
+  const auto centre=hip+axis*t,d=p-centre;const float rx=.088f-.007f*t,rz=.104f-.012f*t,x=Dot(d,right)/rx,z=Dot(d,forward)/rz,n=std::sqrt(x*x+z*z);
+  if(n<1){const float q=n>.001f?1/n:0;p=centre+right*(x*rx*q)+forward*(n>.001f?z*rz*q:rz);}
+ }
+};
+inline void ProjectThigh(Vec& p,Vec hip,Vec knee,Vec right){ThighProjector(hip,knee,right).Project(p);}
 inline Frame ShortRadialFit(unsigned leg,float scale){Frame f;f.x={scale,0,0};f.z={0,0,scale};f.p={(leg?-.09047f:.09048f)*(1-scale),0,.015404f*(1-scale)};return f;}
 inline Vec ShortPoint(const ShortProbe& p,const std::array<Frame,50>& skin){Vec out{};for(const auto& v:p.v)out=out+SkinContact(v,skin)*(1.f/3);return out;}
 template<size_t N>ShortFitStats FitVisibleShorts(std::array<Frame,50>& skin,const std::array<ShortProbe,N>& probes){

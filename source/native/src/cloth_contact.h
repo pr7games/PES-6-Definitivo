@@ -20,10 +20,12 @@ ContactStats ResolveGarmentContact(std::array<Frame,50>& skin,const std::array<C
  // draws. Only bones actually referenced by the shorts invalidate this cache.
  // Probe membership is immutable. Keep its original order and arithmetic,
  // but avoid rechecking pinned-only probes on every contact iteration.
- struct ActiveProbes{const ContactVertex* source=nullptr;const void* topology=nullptr;std::vector<unsigned> indices;};
+ struct ActiveProbes{const ContactVertex* source=nullptr;const void* topology=nullptr;std::vector<unsigned> indices;std::array<std::array<float,6>,PR> weights{},spread{};std::array<Vec,PR> rest{};std::array<float,PR> denominator{};};
  static thread_local ActiveProbes active;
  if(active.source!=shirt.data()||active.topology!=probes.data()){
   active.source=shirt.data();active.topology=probes.data();active.indices.clear();active.indices.reserve(PR);
+  active.weights={};active.rest={};active.denominator={};
+  for(unsigned k=0;k<PR;k++){for(auto v:probes[k]){active.rest[k]=active.rest[k]+shirt[v].p*(1.f/3);for(auto inf:shirt[v].influence)if(ShirtControl(inf.bone)&&inf.weight>0)active.weights[k][inf.bone-28]+=inf.weight/3.f;}constexpr unsigned left[6]={3,0,1,4,5,2},right[6]={1,2,5,0,3,4};for(unsigned i=0;i<6;i++){active.spread[k][i]=active.weights[k][i]*.80f+(active.weights[k][left[i]]+active.weights[k][right[i]])*.10f;active.denominator[k]+=active.weights[k][i]*active.spread[k][i];}}
   for(unsigned k=0;k<PR;k++){bool movable=false;for(auto v:probes[k])for(auto i:shirt[v].influence)if(ShirtControl(i.bone)&&i.weight>.001f){movable=true;break;}if(movable)active.indices.push_back(k);}
  }
  struct TriangleGeometry{Vec a,b,c,normal,e1,e2,rayH;float rayInv=0;bool valid=false;};
@@ -47,7 +49,7 @@ ContactStats ResolveGarmentContact(std::array<Frame,50>& skin,const std::array<C
   }return winding!=0;
  };
  const auto closest=[&](Vec p,Vec& normal,float& signed_distance){
-  const float rootDistance=bounds[0].Distance(p);if(rootDistance>.004f*.004f)return false;
+  const float rootDistance=bounds[0].Distance(p);if(rootDistance>.006f*.006f)return false;
   float best=.08f*.08f;bool found=false;unsigned stack[32],size=1;float distances[32];stack[0]=0;distances[0]=rootDistance;
   // Bounds stay fixed throughout this query. Carry the child distance onto
   // the stack instead of calculating it again when the child is popped.
@@ -56,7 +58,7 @@ ContactStats ResolveGarmentContact(std::array<Frame,50>& skin,const std::array<C
   }return found&&(signed_distance>=0||inside(p));
  };
  ContactStats stats;const auto initial=skin;std::array<Vec,50> angular_offset{};std::array<Vec,50> local_offset{};
- const auto rotate=[](Vec v,Vec omega){const float angle=Length(omega);if(angle<1e-8f)return v;const auto axis=omega*(1/angle);return v*std::cos(angle)+Cross(axis,v)*std::sin(angle)+axis*(Dot(axis,v)*(1-std::cos(angle)));};
+ 
  // Sequential PBD on the rendered garment. Keep the pinned top controls fixed;
  // independent averaged pushes used to cancel around a raised thigh.
  for(unsigned iteration=0;iteration<iterations;iteration++){
@@ -64,20 +66,19 @@ ContactStats ResolveGarmentContact(std::array<Frame,50>& skin,const std::array<C
   for(const auto probeIndex:active.indices){
    const auto probe=probes[probeIndex];
    Vec p{};for(auto v:probe)p=p+SkinContact(shirt[v],skin)*(1.f/3);Vec normal;float distance;
-   if(!closest(p,normal,distance)||distance>=.004f)continue;
+   if(!closest(p,normal,distance)||distance>=.006f)continue;
    // A raised thigh can make the closest face point IN toward the pelvis.
    // The outer jersey must slide over that leg, not be pushed behind it.
-   const auto rest=(shirt[probe[0]].p+shirt[probe[1]].p+shirt[probe[2]].p)*(1.f/3);const auto outward=Unit(skin[0].Linear({rest.x,0,rest.z+.005f}),{0,0,1});
-   if(distance<0&&Dot(normal,outward)<.2f)normal=Unit(outward*.65f+Unit(skin[0].y)*.75f);
+   const auto rest=active.rest[probeIndex];const auto outward=Unit(skin[0].Linear({rest.x,0,rest.z+.005f}),{0,0,1});
+   if(distance<0&&rest.z>-.015f)normal=Unit(normal*.35f+Unit(skin[0].y)*.85f+outward*.20f);
+   else if(distance<0&&Dot(normal,outward)<.2f)normal=Unit(outward*.65f+Unit(skin[0].y)*.75f);
 
    if(coherent){
     // Final translation-only contact follows the actual controls touched by
     // this probe. A raised left thigh cannot lift the whole opposite band.
-    std::array<float,50> w{};float den=0;
-    for(auto v:probe)for(auto inf:shirt[v].influence)if(ShirtControl(inf.bone)&&inf.weight>0)w[inf.bone]+=inf.weight/3.f;
-    for(unsigned b=28;b<34;b++)den+=w[b]*w[b];
-    if(den>.02f){const float lambda=std::min(.005f,.005f-distance)/den;
-     for(unsigned b=28;b<34;b++)if(w[b]>0){const auto next=Limit(local_offset[b]+normal*(lambda*w[b]),.035f),shift=next-local_offset[b];local_offset[b]=next;skin[b].p=skin[b].p+shift;stats.maxCorrection=std::max(stats.maxCorrection,Length(next));}
+    const auto& w=active.spread[probeIndex];const float den=active.denominator[probeIndex];
+    if(den>.016f){const float lambda=std::min(.009f,.007f-distance)/den;
+     for(unsigned b=28;b<34;b++)if(w[b-28]>0){const auto next=Limit(local_offset[b]+normal*(lambda*w[b-28]),.055f),shift=next-local_offset[b];local_offset[b]=next;skin[b].p=skin[b].p+shift;stats.maxCorrection=std::max(stats.maxCorrection,Length(next));}
      contacts++;
     }
     continue;
@@ -89,6 +90,8 @@ ContactStats ResolveGarmentContact(std::array<Frame,50>& skin,const std::array<C
    if(denominator<.05f)continue;const float lambda=std::min(.012f,.008f-distance)/denominator;
    for(unsigned b=28;b<34;b++)if(weights[b]>0){
     const auto next_angle=Limit(angular_offset[b]+rot_gradient[b]*(lambda*weights[b]*inverse_inertia),.45f),omega=next_angle-angular_offset[b];angular_offset[b]=next_angle;
+    const float angle=Length(omega);const bool rotating=angle>=1e-8f;const auto axis=rotating?omega*(1/angle):Vec{};const float cosine=rotating?std::cos(angle):1.f,sine=rotating?std::sin(angle):0.f;
+    const auto rotate=[&](Vec v,Vec){if(!rotating)return v;return v*cosine+Cross(axis,v)*sine+axis*(Dot(axis,v)*(1-cosine));};
     const auto pivot=skin[b].Point(pivots[b]);Frame desired{rotate(skin[b].x,omega),rotate(skin[b].y,omega),rotate(skin[b].z,omega),pivot+rotate(skin[b].p-pivot,omega)+normal*(lambda*weights[b])};
     const auto bounds=control_bounds[b];float maximum=0;for(unsigned c=0;c<8;c++){const Vec point{c&1?bounds.high.x:bounds.low.x,c&2?bounds.high.y:bounds.low.y,c&4?bounds.high.z:bounds.low.z};maximum=std::max(maximum,Length(desired.Point(point)-initial[b].Point(point)));}
     const float limit=b>=42?.120f:.075f;if(maximum>limit){const float t=limit/maximum;desired={initial[b].x*(1-t)+desired.x*t,initial[b].y*(1-t)+desired.y*t,initial[b].z*(1-t)+desired.z*t,initial[b].p*(1-t)+desired.p*t};}
@@ -105,4 +108,6 @@ ContactStats ResolveGarmentContact(std::array<Frame,50>& skin,const std::array<C
  return stats;
 }
 }
+
+
 

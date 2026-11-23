@@ -46,6 +46,9 @@ for (const f of fs.readdirSync(dir)) {
     if(!next.includes(entry))throw Error('Team editor cleanup anchor changed');
     next='extern "C" void pes6_native_team_leave(PPCContext&,uint8_t*);\n'+next.replace(entry,entry+'\n\tpes6_native_team_leave(ctx,base);');
   }
+  if(next.includes('DEFINE_REX_FUNC(sub_828209B8)')){
+    next=next.replace(/DEFINE_REX_FUNC\(sub_828209B8\) \{[\s\S]*?\n\}/, 'DEFINE_REX_FUNC(sub_828209B8) {\n\tREX_FUNC_PROLOGUE();\n\textern void pes6_show_keyboard_ui(PPCContext&, uint8_t*);\n\tpes6_show_keyboard_ui(ctx, base);\n\treturn;\n}');
+  }
   // Replace the earlier broad classification override with field-specific getters.
   next=next.replace('extern "C" bool pes6_team_tactics_custom(uint8_t*,uint32_t);\n','')
     .replace('\n\tif(pes6_team_tactics_custom(base,ctx.r4.u32)){ctx.r3.u64=0;return;}','');
@@ -174,6 +177,16 @@ for (const f of fs.readdirSync(dir)) {
   }
   for(const [fn,exit,reg,numbers]of [['822F62C8','822F6460','r28',false],['822F6AD8','822F6D80','r31',true]]){
     const start=next.indexOf('DEFINE_REX_FUNC(sub_'+fn+')');if(start<0)continue;const end=next.indexOf('\n}\n',start);let body=next.slice(start,end);const branch='if (ctx.cr0.eq) goto loc_'+exit+';';if(body.includes(branch)){body=body.replace(branch,'if (ctx.cr0.eq && !pes6_editor_lettering_recolor(ctx.'+reg+'.u32,'+numbers+')) goto loc_'+exit+';');if(!next.includes('extern "C" bool pes6_editor_lettering_recolor'))next='extern "C" bool pes6_editor_lettering_recolor(uint32_t,bool);\n'+next;const actual=next.indexOf('DEFINE_REX_FUNC(sub_'+fn+')'),stop=next.indexOf('\n}\n',actual);next=next.slice(0,actual)+body+next.slice(stop);}
+  }
+  if(next.includes('DEFINE_REX_FUNC(sub_822F6AD8)')&&!next.includes('pes6_editor_lettering_nativo(base,ctx.r31.u32')){
+    const start=next.indexOf('DEFINE_REX_FUNC(sub_822F6AD8)'),end=next.indexOf('\n}\n',start);let body=next.slice(start,end);
+    const branch='if (ctx.cr6.eq) goto loc_822F6C0C;';
+    if(body.includes(branch)){body=body.replace(branch,'if (pes6_editor_lettering_nativo(base,ctx.r31.u32,ctx.r29.u32,ctx.r30.u32,true)) goto loc_822F6D80;\n\tif (ctx.cr6.eq) goto loc_822F6C0C;');if(!next.includes('extern "C" bool pes6_editor_lettering_nativo'))next='extern "C" bool pes6_editor_lettering_nativo(uint8_t*,uint32_t,uint32_t,uint32_t,bool);\n'+next;const actual=next.indexOf('DEFINE_REX_FUNC(sub_822F6AD8)'),stop=next.indexOf('\n}\n',actual);next=next.slice(0,actual)+body+next.slice(stop);}
+  }
+  if(next.includes('DEFINE_REX_FUNC(sub_822F62C8)')&&!next.includes('pes6_editor_lettering_nativo(base,ctx.r28.u32')){
+    const start=next.indexOf('DEFINE_REX_FUNC(sub_822F62C8)'),end=next.indexOf('\n}\n',start);let body=next.slice(start,end);
+    const branch='if (!ctx.cr0.eq) goto loc_822F638C;';
+    if(body.includes(branch)){body=body.replace(branch,'if (pes6_editor_lettering_nativo(base,ctx.r28.u32,ctx.r31.u32,0,false)) goto loc_822F6460;\n\tif (!ctx.cr0.eq) goto loc_822F638C;');if(!next.includes('extern "C" bool pes6_editor_lettering_nativo'))next='extern "C" bool pes6_editor_lettering_nativo(uint8_t*,uint32_t,uint32_t,uint32_t,bool);\n'+next;const actual=next.indexOf('DEFINE_REX_FUNC(sub_822F62C8)'),stop=next.indexOf('\n}\n',actual);next=next.slice(0,actual)+body+next.slice(stop);}
   }
   if(next.includes('DEFINE_REX_FUNC(sub_82178580)')&&!next.includes('pes6_apply_real_team_names')){
     const entry='DEFINE_REX_FUNC(sub_82178580) {\n\tREX_FUNC_PROLOGUE();';

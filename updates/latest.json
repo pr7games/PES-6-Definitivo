@@ -1,0 +1,25 @@
+{
+    "minimumLauncher":  "0.2.1",
+    "schemaVersion":  2,
+    "version":  "0.3",
+    "packages":  [
+                     {
+                         "url":  "https://github.com/pr7games/PES-6-Definitivo/releases/download/v0.3/PES6-Definitivo-0.3-part01.zip",
+                         "name":  "PES6-Definitivo-0.3-part01.zip",
+                         "sha256":  "0951103911b0ca5a123c8b52e55876e968869ce93081f1171222425b1516ecc2",
+                         "size":  432610968
+                     },
+                     {
+                         "url":  "https://github.com/pr7games/PES-6-Definitivo/releases/download/v0.3/PES6-Definitivo-0.3-part02.zip",
+                         "name":  "PES6-Definitivo-0.3-part02.zip",
+                         "sha256":  "8f8396050646119e0d6f20f053c71a8ad30a8413e7cebb076aa16d9d5fcfb498",
+                         "size":  474012322
+                     },
+                     {
+                         "url":  "https://github.com/pr7games/PES-6-Definitivo/releases/download/v0.3/PES6-Definitivo-0.3-part03.zip",
+                         "name":  "PES6-Definitivo-0.3-part03.zip",
+                         "sha256":  "02b38e8c32c76d2fae7d7524e8a7e69698001e6b5eff5d00128051ca956f3d10",
+                         "size":  702171326
+                     }
+                 ]
+}

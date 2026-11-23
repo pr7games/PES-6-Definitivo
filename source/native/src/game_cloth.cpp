@@ -38,11 +38,14 @@ struct Track {
  std::array<uint8_t,50*64> pose_input{},pose_output{};double cached_time=-1;uint64_t cached_generation=0;unsigned cached_profile=0;bool pose_cached=false;
  Frame view_root{},view_inverse{},view_transform{};std::array<Frame,6> view_original_hem{};uint32_t view_bind=0;bool view_ready=false;
 
- Grid<3,12> shirt;std::array<Grid<2,8>,2> pants;
+ Grid<3,12> shirt;std::array<Grid<2,8>,2> pants;std::array<FabricLag,2> leg_lag,arm_lag;std::array<Vec,2> sleeve_delta{};
  uint32_t mode_flags=0,mode_manager=0,mode_mesh=0,profile_model=0,profile_data=0;unsigned collision_profile=0;bool profile_known=false;unsigned mode_age=0;bool outside=false,mode_known=false;
  Vec soft_position{},soft_velocity{},soft_delta{};bool soft_ready=false,native_lod=false;
+ float shirt_activity=0;bool shirt_activity_ready=false;
+ Vec last_foot_separation{};std::array<Frame,6> idle_hem{};float leg_quiet=0,leg_motion=1;bool feet_ready=false,idle_hem_ready=false;
+ std::array<float,2> hem_lift_filtered{};std::array<Vec,6> hem_motion{};bool hem_ready=false,hem_motion_ready=false;FabricLag torso_lag;
  uint64_t generation=0;double cloth_time=0;bool mapped=false,reported=false,node_fallback=false;ContactStats contact;ShortFitStats short_fit;unsigned rig_fallbacks=0;
- void Reset(){pose_cached=false;view_ready=false;shirt.ready=false;pending_contact={};for(auto& p:pants)p.ready=false;}
+ void Reset(){soft_ready=false;shirt_activity_ready=false;feet_ready=idle_hem_ready=false;leg_quiet=0;leg_motion=1;hem_ready=hem_motion_ready=false;torso_lag.ready=false;for(auto& lag:leg_lag)lag.ready=false;for(auto& lag:arm_lag)lag.ready=false;pose_cached=false;view_ready=false;shirt.ready=false;pending_contact={};for(auto& p:pants)p.ready=false;}
 };
 std::array<Track,64> tracks{};
 // Called under mutex. Consecutive palette slots normally belong to the same
@@ -55,7 +58,7 @@ Track* PoseTrack(uint32_t matrices,uint32_t input,uint32_t instance){
  for(auto& t:tracks)if(matches(t)){previous=&t;return previous;}
  return nullptr;
 }
-double cloth_time=0;uint64_t generation=1;bool replay=false;float cursor=0;
+double cloth_time=0;uint64_t generation=1;bool replay=false;float cursor=0;int replay_direction=0;
 bool Valid(uint8_t* base,uint32_t at,size_t bytes,bool write=false){
  if(at<0x10000||uint64_t(at)+bytes>=0xe0000000ull)return false;
 #ifdef PES6_CLOTH_GUEST_PAGE_TABLE
@@ -91,6 +94,15 @@ Frame MixSkin(Frame a,Frame b,float t,Vec pivot){
  out.p=mixed.Point(pivot)-out.Linear(pivot);return out;
 }
 void Write(uint8_t* base,uint32_t at,Frame a){Store(base,at,a.x);Store(base,at+16,a.y);Store(base,at+32,a.z);Store(base,at+48,a.p);}
+Frame SavedClothFrame(const std::array<uint8_t,50*64>& bytes,unsigned b){
+ const auto f=[&](unsigned k){const auto* p=bytes.data()+b*64+k;return std::bit_cast<float>((uint32_t(p[0])<<24)|(uint32_t(p[1])<<16)|(uint32_t(p[2])<<8)|p[3]);};const auto v=[&](unsigned k){return Vec{f(k),f(k+4),f(k+8)};};return {v(0),v(16),v(32),v(48)};
+}
+void ClothView(Track& t,uint8_t* base,uint32_t instance,uint32_t matrices){
+ const auto object=REX_LOAD_U32(instance+248),data=REX_LOAD_U32(object+12),bind=data+REX_LOAD_U32(data+28);const auto inverse0=Read(base,bind+80),renderRoot=Read(base,matrices);
+ if(!t.view_ready||t.view_bind!=bind||std::memcmp(&renderRoot,&t.view_root,sizeof(Frame))||std::memcmp(&inverse0,&t.view_inverse,sizeof(Frame))){const auto rootSkin=Combine(inverse0,SavedClothFrame(t.pose_output,0));t.view_transform=Combine(Inverse(rootSkin),renderRoot);t.view_root=renderRoot;t.view_inverse=inverse0;t.view_bind=bind;for(unsigned b=28;b<34;b++)t.view_original_hem[b-28]=Combine(Combine(Read(base,bind+b*176+80),SavedClothFrame(t.pose_input,b)),t.view_transform);t.view_ready=true;}
+}
+float SleeveBoneFactor(unsigned bone){return bone==24||bone==25?1.f:bone==21||bone==23?.85f:bone==20||bone==22?.35f:.20f;}
+unsigned SleeveSide(unsigned bone){return bone==19||bone==22||bone==23||bone==25?1:0;}
 template<size_t N>std::array<Vec,N> Transform(const std::array<Vec,N>& rest,Frame frame){std::array<Vec,N> out;for(unsigned i=0;i<N;i++)out[i]=frame.Point(rest[i]);return out;}
 Frame Surface(const Grid<3,12>& grid,unsigned row,unsigned col,Frame chest,const std::array<Vec,36>* target=nullptr){
  const auto& points=target?*target:grid.position;
@@ -177,10 +189,17 @@ void Diagnostic(Track& track,uint8_t* base,Frame native_root,Vec pelvis,unsigned
 #endif
 }
 }
-extern "C" void pes6_cloth_tick(uint8_t* base){if(!pes6_cloth_enabled())return;std::lock_guard lock(mutex);if(base[0x8313A93E])return;if(replay){generation++;replay=false;}cloth_time+=1./60;}
+extern "C" void pes6_cloth_tick(uint8_t* base){if(!pes6_cloth_enabled())return;std::lock_guard lock(mutex);if(base[0x8313A93E])return;if(replay){generation++;replay=false;replay_direction=0;}cloth_time+=1./60;}
 extern "C" void pes6_cloth_replay(uint8_t* base,uint32_t manager){
  if(!pes6_cloth_enabled()||!Valid(base,manager,40))return;const float next=F(base,manager+36);if(!std::isfinite(next))return;
- std::lock_guard lock(mutex);const float delta=next-cursor;if(!replay||delta<0||delta>4){generation++;replay=true;}else cloth_time+=delta/60.;cursor=next;
+ std::lock_guard lock(mutex);const float delta=next-cursor;
+ const int direction=delta>0?1:delta<0?-1:0;
+ // Reverse playback advances elapsed simulation time. Reset only on cuts
+ // or direction changes, never on every negative replay frame.
+ if(!replay||std::abs(delta)>4||(direction&&replay_direction&&direction!=replay_direction)){
+  generation++;replay=true;replay_direction=direction;
+ }else{cloth_time+=std::abs(delta)/60.;if(direction)replay_direction=direction;}
+ cursor=next;
 }
 extern "C" void pes6_cloth_forget(uint8_t*,uint32_t actor){if(!pes6_cloth_enabled())return;std::lock_guard lock(mutex);for(auto& t:tracks)if(t.actor==actor)t={};}
 extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
@@ -218,9 +237,15 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
  // contacts again (and avoid accumulating a correction on its own output).
  if(t->pose_cached&&t->cached_time==cloth_time&&t->cached_generation==generation&&t->cached_profile==t->collision_profile&&
     (!std::memcmp(base+matrices,t->pose_input.data(),50*64)||!std::memcmp(base+matrices,t->pose_output.data(),50*64))){std::memcpy(base+matrices,t->pose_output.data(),50*64);return;}
+ // Native animation may leave unused cloth controls unchanged. Never use
+ // our previous ripple as a new native baseline and accumulate deformation.
+ if(t->outside&&t->pose_cached&&t->cached_profile==t->collision_profile){
+  for(unsigned bone=36;bone<48;bone++)if(!std::memcmp(base+matrices+bone*64,t->pose_output.data()+bone*64,64))
+   std::memcpy(base+matrices+bone*64,t->pose_input.data()+bone*64,64);
+ }
  std::memcpy(t->pose_input.data(),base+matrices,50*64);
  const auto cache_pose=[&](){std::memcpy(t->pose_output.data(),base+matrices,50*64);t->view_ready=false;t->cached_time=cloth_time;t->cached_generation=generation;t->cached_profile=t->collision_profile;t->pose_cached=true;};
- t->shirt.damping=1.25f;t->shirt.pin_bottom=tucked;t->shirt.max_offset=tucked?.025f:.14f;t->shirt.tether=tucked?.24f:0.f;
+ t->shirt.damping=1.02f;t->shirt.pin_bottom=tucked;t->shirt.max_offset=tucked?.025f:.14f;t->shirt.tether=tucked?.24f:0.f;
  for(auto& pants:t->pants){pants.damping=1.9f;pants.max_offset=.04f;pants.tether=.025f;}
  if(t->generation!=generation){t->generation=generation;t->Reset();t->cloth_time=cloth_time;}
  const float dt=float(cloth_time-t->cloth_time);t->cloth_time=cloth_time;
@@ -231,6 +256,7 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
  if(!t->reported){unsigned i=0;for(unsigned b:{0u,11u,26u,28u,36u,42u})t->native_sample[i++]=Read(base,matrices+t->slots[b]*64);}
  if(!Good(native_root)){Diagnostic(*t,base,native_root,position(0),999,0,0);return;}
  const auto root_skin=Combine(cloth_inverse_bind[0],native_root);
+ const auto inverse_root_skin=Inverse(root_skin);
  auto torso_skin=Combine(cloth_inverse_bind[8],native_frames[8]);if(!Good(torso_skin))torso_skin=root_skin;
  auto neck_skin=Combine(cloth_inverse_bind[11],native_frames[11]);if(!Good(neck_skin))neck_skin=torso_skin;
  std::array<Frame,2> thigh_skin;
@@ -243,13 +269,47 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
  if(!t->soft_ready||dt<0||dt>.1f){t->soft_position=soft_target;t->soft_velocity={};t->soft_delta={};t->soft_ready=true;}
  else if(dt>0){const unsigned steps=std::max(1u,unsigned(std::ceil(dt*120)));const float h=dt/steps;for(unsigned i=0;i<steps;i++){t->soft_velocity=t->soft_velocity+((soft_target-t->soft_position)*70.f-t->soft_velocity*8.f)*h;t->soft_position=t->soft_position+t->soft_velocity*h;}t->soft_delta=Limit((t->soft_position-soft_target)*.42f,.032f);}
  std::array<float,2> trouser_flex{};std::array<Vec,2> trouser_lag{};
+ // Foot motion owns free cloth motion. Torso sway alone cannot keep the hem alive.
+ const Vec foot_separation=inverse_root_skin.Linear(native_frames[9].p-native_frames[10].p);
+ if(!t->feet_ready||dt<0||dt>.1f){t->last_foot_separation=foot_separation;t->leg_quiet=0;t->leg_motion=1;t->feet_ready=true;t->idle_hem_ready=false;}
+ else if(dt>0){
+  const float speed=Length(foot_separation-t->last_foot_separation)/dt;t->last_foot_separation=foot_separation;
+  if(speed>.18f){t->leg_quiet=0;t->leg_motion=1;t->idle_hem_ready=false;}
+  else{t->leg_quiet=std::min(.30f,t->leg_quiet+dt);t->leg_motion=std::clamp((.30f-t->leg_quiet)/.15f,0.f,1.f);}
+ }
  const auto pelvis_up=Unit(root_skin.y);
  for(unsigned leg=0;leg<2;leg++){
   float f=std::clamp((1.f-Dot(Unit(thigh_skin[leg].y),pelvis_up)-.10f)/.65f,0.f,1.f);
-  trouser_flex[leg]=f*f*(3-2*f);trouser_lag[leg]=t->soft_delta*(1.f-.80f*trouser_flex[leg]);
+  trouser_flex[leg]=f*f*(3-2*f);
+  const Vec sample{leg?-.09047f:.09048f,.70f,.01f};
+  t->leg_lag[leg].Step(thigh_skin[leg].Point(sample)-root_skin.Point(sample),dt);
+  trouser_lag[leg]=t->leg_lag[leg].delta*(1.f-.75f*trouser_flex[leg]);
+ }
+ // Low-excursion walking should not receive sprint-sized fabric amplification.
+ // Read native pose excursion; high knees/kicks retain full response even in place.
+ const auto smooth_activity=[](float x){x=std::clamp(x,0.f,1.f);return x*x*(3.f-2.f*x);};
+ const float thigh_excursion=std::max(1.f-Dot(Unit(thigh_skin[0].y),pelvis_up),1.f-Dot(Unit(thigh_skin[1].y),pelvis_up));
+ const float torso_excursion=1.f-Dot(Unit(torso_skin.y),pelvis_up);
+ const float activity_target=std::max(smooth_activity((thigh_excursion-.07f)/.25f),smooth_activity((torso_excursion-.06f)/.16f));
+ if(!t->shirt_activity_ready||dt<0||dt>.1f){t->shirt_activity=activity_target;t->shirt_activity_ready=true;}
+ else if(dt>0){const float response=activity_target>t->shirt_activity?.055f:.22f;t->shirt_activity+=(activity_target-t->shirt_activity)*(1.f-std::exp(-dt/response));}
+ const float shirt_activity=t->outside?t->shirt_activity:1.f;
+ t->shirt.damping=1.02f+2.0f*(1.f-shirt_activity);
+ const auto raw_hem_lift=HemLift(root_skin,thigh_skin);
+ if(!t->hem_ready||dt<0||dt>.1f){t->hem_lift_filtered=raw_hem_lift;t->hem_ready=true;}
+ else if(dt>0){const float blend=1.f-std::exp(-dt/(.12f-.10f*shirt_activity));for(unsigned leg=0;leg<2;leg++)t->hem_lift_filtered[leg]+=(raw_hem_lift[leg]-t->hem_lift_filtered[leg])*blend;}
+ const auto& hem_lift=t->hem_lift_filtered;
+ t->torso_lag.Step(inverse_root_skin.Point(torso_skin.Point({0,1.32f,.04f})),dt);
+ const Vec torso_fold=Limit(t->torso_lag.delta*.18f+inverse_root_skin.Linear(t->soft_delta)*.065f,.004f)*t->leg_motion;
+
+ for(unsigned arm=0;arm<2;arm++){
+  const unsigned elbow=arm?23:21;const Vec sample{arm?-.4312f:.4312f,1.4553f,-.01925f};
+  const auto arm_skin=Combine(cloth_inverse_bind[elbow],native_frames[elbow]);
+  t->arm_lag[arm].Step(arm_skin.Point(sample)-root_skin.Point(sample),dt);t->sleeve_delta[arm]=Limit(t->arm_lag[arm].delta*.19f,.006f);
+  auto cuff=native_frames[48+arm];if(Good(cuff)){cuff.p=cuff.p+t->sleeve_delta[arm];Write(base,matrices+(48+arm)*64,cuff);}
  }
  const auto native_shorts=[&](){for(unsigned b:{26u,27u,34u,35u}){
-  auto f=native_frames[b];const bool right=b==27||b==35;const float side=right?-1.f:1.f;
+  auto f=native_frames[b];const bool right=b==27||b==35;
   const auto& thigh=thigh_skin[right?1:0];
   const float flex=trouser_flex[right?1:0];
   const Vec attachment{right?-.09047f:.09048f,.84f,.01f};
@@ -258,15 +318,15 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   auto following=Combine(cloth_inverse_bind[b],f);
   if(flex>1e-6f){following=MixHemFrame(following,thigh,flex*(b<28?.35f:.90f),attachment);f=Combine(cloth_bind[b],following);}
   const auto lag=trouser_lag[right?1:0];
-  if(b<28)f.p=f.p+lag*(side*.18f);
+  if(b<28)f.p=f.p+lag*.12f;
   else {
    // Swing the lower fabric about its upper attachment without changing scale.
    const auto skin=following;
    const auto pivot=skin.Point(attachment);
-   const auto omega=Limit(Cross(Unit(root_skin.y),lag*side)*8.f,.14f);const float angle=Length(omega);
+   const auto omega=Limit(Cross(pelvis_up,lag)*9.5f,.18f);const float angle=Length(omega);
    const float cosine=std::cos(angle),sine=std::sin(angle);const auto axis=angle>1e-7f?omega*(1/angle):Vec{};
    const auto rotate=[&](Vec v){if(angle<1e-7f)return v;return v*cosine+Cross(axis,v)*sine+axis*(Dot(axis,v)*(1-cosine));};
-   f={rotate(f.x),rotate(f.y),rotate(f.z),pivot+rotate(f.p-pivot)+lag*(side*1.10f)};
+   f={rotate(f.x),rotate(f.y),rotate(f.z),pivot+rotate(f.p-pivot)+lag*1.30f};
   }
   if(Good(f))Write(base,matrices+b*64,f);
  }t->short_fit={};};
@@ -275,7 +335,7 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   // Tucked fabric stays anchored at the waist. Reuse the existing damped gait
   // response, with a small common shear instead of freeing its tucked hem.
   // All native shirt controls receive the same deformation, without a new mesh.
-  auto sway=Inverse(root_skin).Linear(t->soft_delta);sway.y=0;sway=Limit(sway*1.7f,.030f);
+  auto sway=inverse_root_skin.Linear(t->soft_delta);sway.y=0;sway=Limit(sway*1.7f,.030f);
   Frame fabric;fabric.y=fabric.y+sway;fabric.p=sway*-1.f;
   for(unsigned b=28;b<48;b++)if(b<34||b>=36){const auto skin=Combine(cloth_inverse_bind[b],native_frames[b]);Write(base,matrices+b*64,Combine(cloth_bind[b],Combine(fabric,skin)));}
   cache_pose();return;
@@ -285,11 +345,14 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   if(row==0)return neck_skin;
   if(row==1)return MixSkin(Combine(cloth_inverse_bind[3],native_frames[3]),torso_skin,.58f,pivot);
   if(tucked)return root_skin;
-  return LocalHemAttachment(root_skin,thigh_skin,pivot);
+  return LocalHemAttachment(root_skin,thigh_skin,pivot,hem_lift,shirt_activity);
  };
+ // Each distinct attachment is constructed once per pose. Rendering and
+ // contact reuse the exact same frame as the simulation target.
+ std::array<Frame,36> shirt_bases;for(unsigned row=0;row<3;row++)for(unsigned col=0;col<12;col++)shirt_bases[row*12+col]=shirt_base(row,t->shirt.rest[row*12+col]);
  // Install valid skin bases before testing simulation-node quality. Sparse LODs
  // must retain their visible garment even when their unused nodes are stale.
- for(unsigned row=2;row<3;row++)for(unsigned col=0;col<6;col++){const auto pivot=t->shirt.rest[row*12+control_column[col]];Write(base,matrices+control_bones[row][col]*64,Combine(cloth_bind[control_bones[row][col]],shirt_base(row,pivot)));}
+ for(unsigned row=2;row<3;row++)for(unsigned col=0;col<6;col++){const auto pivot=t->shirt.rest[row*12+control_column[col]];Write(base,matrices+control_bones[row][col]*64,Combine(cloth_bind[control_bones[row][col]],shirt_bases[row*12+control_column[col]]));}
  for(unsigned leg=0;leg<2;leg++)for(unsigned b:{leg?27u:26u,leg?35u:34u})Write(base,matrices+b*64,Combine(cloth_bind[b],thigh_skin[leg]));
  const bool node_fallback=!Finite(position(0))||!Finite(position(8))||!Finite(position(14))||Length(position(1)-position(2))<.08f||Length(position(1)-position(2))>.40f||Length(position(14)-position(8))<.12f;
  if(node_fallback){t->rig_fallbacks++;for(unsigned b=0;b<26;b++){auto skin=Combine(cloth_inverse_bind[b],Read(base,matrices+b*64));if(!Good(skin))skin=root_skin;joints[b]=skin.Point(cloth_bind[b].p);}}
@@ -306,7 +369,7 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   // Conjugate model-space cloth through the real KTMDL bind basis.
   // Low-LOD native cloth controls may be unused/stale. Drive every newly
   // weighted shirt control from current core bones, never from stale controls.
-  if(!shorts){const unsigned row=2;unsigned col=0;while(col<5&&control_bones[row][col]!=bone)col++;original=Combine(cloth_bind[bone],shirt_base(row,t->shirt.rest[row*12+control_column[col]]));}
+  if(!shorts){const unsigned row=2;unsigned col=0;while(col<5&&control_bones[row][col]!=bone)col++;original=Combine(cloth_bind[bone],shirt_bases[row*12+control_column[col]]);}
   else {
    // Visible bare thighs are skinned by 1/2, not the extra muscle controls4/6.
    // Sparse LODs may
@@ -330,9 +393,10 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   basis.p=hips[leg]-basis.Linear({leg?-.09047f:.09048f,.9548f,.015404f});leg_frames[leg]=basis;
  }
  legs_valid=legs_valid&&Good(leg_frames[0])&&Good(leg_frames[1]);
+ const std::array<ThighProjector,2> thigh_projectors={ThighProjector(hips[0],knees[0],root.x),ThighProjector(hips[1],knees[1],root.x)};
  if(legs_valid)for(unsigned leg=0;leg<2;leg++){
   const auto frame=leg_frames[leg];const auto target=Transform(t->pants[leg].rest,frame);
-  t->pants[leg].Step(target,dt,[&](Vec& p){ProjectThigh(p,hips[leg],knees[leg],root.x);ProjectThigh(p,hips[1-leg],knees[1-leg],root.x);});
+  t->pants[leg].Step(target,dt,[&](Vec& p){thigh_projectors[leg].Project(p);thigh_projectors[1-leg].Project(p);});
   const auto hem=TrouserFrame(t->pants[leg],leg,frame);
   pants_radius[leg]=std::clamp(std::max(Length(hem.x)*.105f,Length(hem.z)*.115f)+.004f,.085f,.135f);
  }
@@ -350,23 +414,28 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   if(arms_valid){ProjectCapsule(p,position(21),position(24),.050f);ProjectCapsule(p,position(23),position(25),.050f);}
   ProjectEllipsoid(p,hip,{.171f,.14f,.115f});
  };
- const auto render_to_world=Combine(Inverse(root_skin),root);
+ const auto render_to_world=Combine(inverse_root_skin,root);
  std::array<Vec,36> targets;
- for(unsigned row=0;row<3;row++)for(unsigned col=0;col<12;col++){const unsigned i=row*12+col;targets[i]=Combine(shirt_base(row,t->shirt.rest[i]),render_to_world).Point(t->shirt.rest[i]);}
+ for(unsigned row=0;row<3;row++)for(unsigned col=0;col<12;col++){const unsigned i=row*12+col;targets[i]=Combine(shirt_bases[i],render_to_world).Point(t->shirt.rest[i]);}
  if(dt>0&&t->shirt.ready)for(unsigned i=12;i<36;i++){if(!t->shirt.Pinned(i)){t->shirt.position[i]=t->shirt.position[i]+t->pending_contact[i];t->shirt.previous[i]=t->shirt.previous[i]+t->pending_contact[i];}t->pending_contact[i]={};}
- t->shirt.Step(targets,dt,body_project);
+ // Cuts have no elapsed motion: skip the synthetic gravity/contact step
+ // that Grid::Step applies to a new seed. Settled cloth uses the retained
+ // pose and precise visible-mesh contact instead of inflating the coarse cage.
+ const bool settled=t->leg_motion==0&&t->idle_hem_ready;
+ if(dt==0||settled)t->shirt.Reset(targets);
+ else t->shirt.Step(targets,dt,body_project);
  if(legs_valid){
   // Resolve fabric/fabric only once per simulation update, not per draw pass.
   if(dt>0)for(unsigned iteration=0;iteration<2;iteration++){
    Couple(t->pants[0],t->pants[1]);Couple(t->pants[1],t->pants[0]);
-   for(unsigned leg=0;leg<2;leg++)Couple(t->shirt,t->pants[leg]);
+   if(!settled)for(unsigned leg=0;leg<2;leg++)Couple(t->shirt,t->pants[leg]);
   }
   if(dt>0)for(unsigned leg=0;leg<2;leg++){
    const auto target=Transform(t->pants[leg].rest,leg_frames[leg]);
-   t->pants[leg].LimitStrain(target,[&](Vec& p){ProjectThigh(p,hips[leg],knees[leg],root.x);ProjectThigh(p,hips[1-leg],knees[1-leg],root.x);},1);
+   t->pants[leg].LimitStrain(target,[&](Vec& p){thigh_projectors[leg].Project(p);thigh_projectors[1-leg].Project(p);},1);
   }
  }
- if(dt>0)t->shirt.LimitStrain(targets,body_project,2);
+ if(dt>0&&!settled)t->shirt.LimitStrain(targets,body_project,2);
  constexpr unsigned bones[3][6]={{42,43,44,45,46,47},{36,37,38,39,40,41},{28,29,30,31,32,33}},column[6]={1,3,5,11,9,7};
  for(unsigned row=2;row<3;row++)for(unsigned col=0;col<6;col++){
   const unsigned point=row*12+column[col];const auto reference=Surface(t->shirt,row,column[col],chest,&targets);
@@ -375,53 +444,69 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
  }
  // Final contact pass uses the deformed visible mesh, including all LODs.
  t->contact={};if(t->outside){std::array<Frame,50> skin;for(unsigned b=0;b<50;b++)skin[b]=Combine(cloth_inverse_bind[b],Read(base,matrices+b*64));
-  const auto before_contact=skin;
+  std::array<Frame,6> before_contact;for(unsigned i=0;i<6;i++)before_contact[i]=skin[28+i];
   t->contact=ResolveClothProfile(t->collision_profile,skin,3,!t->reported);
+  std::array<Frame,6> contact_only;for(unsigned i=0;i<6;i++)contact_only[i]=skin[28+i];
+  const float hem_blend=dt>0?1.f-std::exp(-dt/(.10f-.08f*shirt_activity)):0.f;
   // Keep each sector attached locally. Neighbour smoothing avoids abrupt
   // folds, without lifting the opposite side/centre as a single rigid band.
   {
    constexpr unsigned left[6]={3,0,1,4,5,2},right[6]={1,2,5,0,3,4};
-   std::array<Frame,6> anchors,relative;std::array<Vec,6> motion;
-   for(unsigned col=0;col<6;col++){const unsigned b=bones[2][col];const auto pivot=t->shirt.rest[24+column[col]];anchors[col]=shirt_base(2,pivot);relative[col]=Combine(Inverse(anchors[col]),skin[b]);motion[col]=skin[b].Point(pivot)-anchors[col].Point(pivot);}
+   std::array<Frame,6> anchors,anchor_inverse,relative;std::array<Vec,6> motion;
+   for(unsigned col=0;col<6;col++){const unsigned b=bones[2][col];const auto pivot=t->shirt.rest[24+column[col]];anchors[col]=shirt_bases[24+column[col]];anchor_inverse[col]=Inverse(anchors[col]);relative[col]=Combine(anchor_inverse[col],skin[b]);motion[col]=skin[b].Point(pivot)-anchors[col].Point(pivot);}
    for(unsigned col=0;col<6;col++){
     const auto pivot=t->shirt.rest[24+column[col]];Frame rotation;rotation.x=Unit(relative[col].x,{1,0,0});rotation.y=Unit(relative[col].y-rotation.x*Dot(relative[col].y,rotation.x),{0,1,0});rotation.z=Unit(Cross(rotation.x,rotation.y),{0,0,1});
-    const bool rear=pivot.z<-.035f;const float rotationLimit=rear?.065f:.19f;
+    const bool rear=pivot.z<-.035f;const float rotationLimit=(rear?.070f:.17f)*(.30f+.70f*shirt_activity);
     const float angle=std::acos(std::clamp((rotation.x.x+rotation.y.y+rotation.z.z-1)*.5f,-1.f,1.f));if(angle>rotationLimit)rotation=MixSkin(Frame{},rotation,rotationLimit/angle,{});
-    auto shift=Limit((motion[col]*.75f+(motion[left[col]]+motion[right[col]])*.125f)*(rear?1.32f:1.50f),rear?.060f:.065f);
-    if(rear){auto local=Inverse(anchors[col]).Linear(shift);local.z=std::clamp(local.z,-.018f,.018f);local.y=std::min(local.y,.020f);shift=anchors[col].Linear(local);}
+    auto shift=Limit((motion[col]*.75f+(motion[left[col]]+motion[right[col]])*.125f)*(.16f+1.24f*shirt_activity),.010f+.054f*shirt_activity);
+    if(!t->hem_motion_ready||dt<0||dt>.1f)t->hem_motion[col]=shift;
+    else if(dt>0)t->hem_motion[col]=t->hem_motion[col]+(shift-t->hem_motion[col])*hem_blend;
+    shift=t->hem_motion[col];
+    {const auto up=Unit(anchors[col].y);const float rise=Dot(shift,up),cap=.003f+.061f*shirt_activity;if(rise>cap)shift=shift-up*(rise-cap);}
+    if(rear){auto local=anchor_inverse[col].Linear(shift);local.z=std::clamp(local.z,-.018f,.018f);local.y=std::min(local.y,.020f);shift=anchors[col].Linear(local);}
     const auto centre=anchors[col].Point(pivot);rotation.p=centre+shift-rotation.Linear(centre);skin[bones[2][col]]=Combine(anchors[col],rotation);
    }
   }
+  t->hem_motion_ready=true;
   // Straighten the lower silhouette without narrowing the seam/upper torso.
   // Contact runs afterwards, so the extra clearance still takes precedence.
-  const auto foldGait=Inverse(root_skin).Linear(t->soft_delta);
+  const auto foldGait=inverse_root_skin.Linear(t->soft_delta)*((.20f+.80f*shirt_activity)*t->leg_motion);
   for(unsigned col=0;col<6;col++){const auto pivot=t->shirt.rest[24+column[col]];skin[bones[2][col]]=Combine(Combine(MovingFoldShape(pivot,foldGait),StraightHemShape(pivot)),skin[bones[2][col]]);}
   // Contact is enforced on the FINAL shape too, locally per affected control.
-  const unsigned coherent_steps=t->contact.maxCorrection>.025f?6u:3u;
+  const unsigned coherent_steps=t->contact.maxCorrection>.025f?7u:3u;
+  std::array<Frame,6> before_final_contact;for(unsigned i=0;i<6;i++)before_final_contact[i]=skin[28+i];
   const auto final_contact=ResolveClothProfileCoherent(t->collision_profile,skin,coherent_steps);
   t->contact.corrected+=final_contact.corrected;t->contact.maxCorrection=std::max(t->contact.maxCorrection,final_contact.maxCorrection);
   if(dt>0){
    constexpr unsigned sorted[2][6]={{36,37,38,41,40,39},{28,29,30,33,32,31}};
    for(unsigned row=2;row<3;row++)for(unsigned col=0;col<12;col++){
-    Vec delta{};if(col%2){const unsigned b=sorted[row-1][col/2];const auto rest=t->shirt.rest[row*12+col];delta=skin[b].Point(rest)-before_contact[b].Point(rest);}
-    else {const unsigned left=sorted[row-1][((col+11)%12)/2],right=sorted[row-1][((col+1)%12)/2];const auto rest=t->shirt.rest[row*12+col];delta=(skin[left].Point(rest)-before_contact[left].Point(rest)+skin[right].Point(rest)-before_contact[right].Point(rest))*.5f;}
-    t->pending_contact[row*12+col]=Limit(render_to_world.Linear(delta),.03f);
+    Vec delta{};if(col%2){const unsigned b=sorted[row-1][col/2];const auto rest=t->shirt.rest[row*12+col];delta=contact_only[b-28].Point(rest)-before_contact[b-28].Point(rest)+skin[b].Point(rest)-before_final_contact[b-28].Point(rest);}
+    else {const unsigned left=sorted[row-1][((col+11)%12)/2],right=sorted[row-1][((col+1)%12)/2];const auto rest=t->shirt.rest[row*12+col];delta=(contact_only[left-28].Point(rest)-before_contact[left-28].Point(rest)+skin[left].Point(rest)-before_final_contact[left-28].Point(rest)+contact_only[right-28].Point(rest)-before_contact[right-28].Point(rest)+skin[right].Point(rest)-before_final_contact[right-28].Point(rest))*.5f;}
+    t->pending_contact[row*12+col]=Limit(render_to_world.Linear(delta)*.35f,.012f);
    }
   }
-  for(unsigned b=28;b<34;b++)Write(base,matrices+b*64,Combine(cloth_bind[b],skin[b]));
-  // Restore upper controls before the isolated centre-front correction.
-  // Protected rear/printing controls retain their native pose.
-  for(unsigned b=36;b<48;b++)Write(base,matrices+b*64,native_frames[b]);
-  // These two centre-front controls have zero influence on the protected
-  // rear panel in all 60 prepared kits. Give the belly room to fold without
-  // moving the back/printing or changing either side of the joined seam.
-  const float fold=std::clamp(1.f-Dot(Unit(root_skin.y),Unit(torso_skin.y)),0.f,1.f);
-  const auto outward=Unit(root_skin.z+torso_skin.z,Unit(root_skin.z,{0,0,1}));
-  const float flutter=std::clamp(Dot(t->soft_delta,outward)*.18f,-.003f,.003f);
-  if(t->profile_known)for(unsigned b:{37u,43u}){
-    auto frame=native_frames[b];frame.p=frame.p+outward*(fold*(b==37?.024f:.010f)+flutter*(b==37?1.f:.35f));
-    if(Good(frame))Write(base,matrices+b*64,frame);
+  // Keep a root-relative settled pose, not a frozen world-space jersey.
+  // Locomotion/kicks release it immediately. Final collision still has priority.
+  if(t->leg_quiet>=.15f){
+   if(!t->idle_hem_ready){for(unsigned i=0;i<6;i++)t->idle_hem[i]=Combine(skin[28+i],inverse_root_skin);t->idle_hem_ready=true;}
+   for(unsigned i=0;i<6;i++){const auto held=Combine(t->idle_hem[i],root_skin);skin[28+i]=MixSkin(skin[28+i],held,1.f-t->leg_motion,cloth_bind[28+i].p);}
+   const auto safety=ResolveClothProfileCoherent(t->collision_profile,skin,3);
+   t->contact.corrected+=safety.corrected;t->contact.maxCorrection=std::max(t->contact.maxCorrection,safety.maxCorrection);
+   if(t->leg_motion==0){t->pending_contact={};t->shirt.ready=false;t->torso_lag.ready=false;}
   }
+  for(unsigned b=28;b<34;b++)Write(base,matrices+b*64,Combine(cloth_bind[b],skin[b]));
+  // Restore the approved native front and protected back controls.
+  // Protected rear/printing controls retain their native pose.
+  static const auto torso_radial=[](){std::array<Vec,12> result{};for(unsigned i=0;i<12;i++){const auto pivot=cloth_bind[36+i].p;const float radius=std::hypot(pivot.x,pivot.z+.005f);result[i]=radius>.01f?Vec{pivot.x/radius,0,(pivot.z+.005f)/radius}:Vec{0,0,1};}return result;}();
+  for(unsigned b=36;b<48;b++){
+   const auto pivot=cloth_bind[b].p;const auto radial=torso_radial[b-36];
+   const float sector=std::clamp(pivot.x/.18f,-1.f,1.f),front=radial.z;
+   const float wave=std::clamp((torso_fold.x*sector+torso_fold.z*front)*(b<42?1.f:-.65f),-.003f,.003f);
+   const Vec shear=radial*(wave*4.f);Frame ripple;ripple.y=ripple.y+shear;ripple.p=radial*wave-shear*pivot.y;
+   const auto native_skin=Combine(cloth_inverse_bind[b],native_frames[b]);
+   Write(base,matrices+b*64,Combine(cloth_bind[b],Combine(ripple,native_skin)));
+  }
+
  }
  cache_pose();
  Diagnostic(*t,base,native_root,pelvis,repairs,clamps,peak);
@@ -454,15 +539,19 @@ extern "C" bool pes6_cloth_surface_palette(uint8_t* base,uint32_t instance,uint3
 // Keep the donor palette unchanged. Separate existing upper/lower face draws
 // select the solved hem pose or the untouched native torso pose.
 extern "C" uint32_t pes6_cloth_palette_matrix(uint8_t* base,uint32_t matrices,uint32_t bone,uint32_t scratch,uint32_t draw,uint32_t slot){
- if(!pes6_cloth_enabled()||bone<28||bone>33)return matrices+bone*64;
+ const bool arm=bone>=18&&bone<=25;
+ if(!pes6_cloth_enabled()||(!arm&&(bone<28||bone>33)))return matrices+bone*64;
  const uint32_t pair=REX_LOAD_U32(draw+32),packet=REX_LOAD_U32(pair);
- const unsigned group=REX_LOAD_U32(packet+8);
+ const unsigned group=REX_LOAD_U32(packet+8),paletteCount=REX_LOAD_U32(packet+24);
+ const bool longSleeve=((group==24||group==25)&&paletteCount==6)||((group==36||group==37)&&paletteCount==13);
+ if(arm&&!longSleeve)return matrices+bone*64;
 
  const bool hem=group==35&&REX_LOAD_U32(packet+24)==26;
  if(hem)return matrices+bone*64;
  const uint32_t instance=REX_LOAD_U32(draw+24),input=instance?REX_LOAD_U32(instance+240):0;
  std::lock_guard lock(mutex);
  if(auto* matched=PoseTrack(matrices,input,instance)){auto& t=*matched;
+  if(arm){auto delta=t.sleeve_delta[SleeveSide(bone)]*SleeveBoneFactor(bone);if(t.matrices!=matrices){ClothView(t,base,instance,matrices);delta=t.view_transform.Linear(delta);}auto frame=Read(base,matrices+bone*64);frame.p=frame.p+delta;std::memcpy(base+scratch,base+matrices+bone*64,64);Write(base,scratch,frame);return scratch;}
   if(!t.outside)return matrices+bone*64; // Native tucked draw and printing share the solved pose.
   if(t.matrices==matrices){if(bone<28||bone>33)return matrices+bone*64;std::memcpy(base+scratch,t.pose_input.data()+bone*64,64);return scratch;}
   // 82200518 builds a DIFFERENT render array: view * pose * inverseBind.
@@ -471,17 +560,19 @@ extern "C" uint32_t pes6_cloth_palette_matrix(uint8_t* base,uint32_t matrices,ui
    const auto f=[&](unsigned k){const auto* p=bytes.data()+b*64+k;return std::bit_cast<float>((uint32_t(p[0])<<24)|(uint32_t(p[1])<<16)|(uint32_t(p[2])<<8)|p[3]);};
    const auto v=[&](unsigned k){return Vec{f(k),f(k+4),f(k+8)};};return Frame{v(0),v(16),v(32),v(48)};
   };
-  const auto object=REX_LOAD_U32(instance+248),data=REX_LOAD_U32(object+12),bind=data+REX_LOAD_U32(data+28);
-  const auto inverse0=Read(base,bind+80);
-  const auto renderRoot=Read(base,matrices);
-  if(!t.view_ready||t.view_bind!=bind||std::memcmp(&renderRoot,&t.view_root,sizeof(Frame))||std::memcmp(&inverse0,&t.view_inverse,sizeof(Frame))){
-   const auto rootSkin=Combine(inverse0,saved(t.pose_output,0));
-   t.view_transform=Combine(Inverse(rootSkin),renderRoot);t.view_root=renderRoot;t.view_inverse=inverse0;t.view_bind=bind;
-   for(unsigned b=28;b<34;b++)t.view_original_hem[b-28]=Combine(Combine(Read(base,bind+b*176+80),saved(t.pose_input,b)),t.view_transform);
-   t.view_ready=true;
-  }
+  ClothView(t,base,instance,matrices);
   if(bone<28||bone>33)return matrices+bone*64;
   std::memcpy(base+scratch,base+matrices+bone*64,64);Write(base,scratch,t.view_original_hem[bone-28]);return scratch;
  }
  return matrices+bone*64;
 }
+
+
+
+
+
+extern "C" bool pes6_cloth_sleeve_offsets(uint8_t* base,uint32_t instance,uint32_t matrices,float* output){
+ if(!pes6_cloth_enabled())return false;const auto input=REX_LOAD_U32(instance+240);std::lock_guard lock(mutex);auto* t=PoseTrack(matrices,input,instance);if(!t)return false;
+ if(t->matrices!=matrices)ClothView(*t,base,instance,matrices);for(unsigned i=0;i<2;i++){const auto d=t->matrices==matrices?t->sleeve_delta[i]:t->view_transform.Linear(t->sleeve_delta[i]);output[i*3]=d.x;output[i*3+1]=d.y;output[i*3+2]=d.z;}return true;
+}
+

@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <cmath>
+#include "stadium_dusk_pitch_fixes.h"
 #include "stadium_sunset.inl"
 #include "stadium_environment.inl"
 #include "stadium_lightmaps.inl"
@@ -44,7 +45,8 @@ bool Init(PPCContext& original,uint8_t* base){
   std::memcpy(base+tables+32,base+0x82D4FCE0u,96);
   std::memcpy(base+tables+128,base+0x82D4FCE0u,12);
   REX_STORE_U32(tables+132,84000);REX_STORE_U32(tables+136,2005);
-  std::memcpy(base+tables+152,base+0x82D4FCE0u,12);
+  // Use Stadio Olimpico (id 4) entrance sequence (aerial/no-tunnel) for Wembley.
+  std::memcpy(base+tables+152,base+0x82D4FCE0u+4*12,12);
   REX_STORE_U32(tables+156,90000);REX_STORE_U32(tables+160,2007);
   constexpr char name[]="Konami Stadium",wembleyName[]="Wembley Stadium",preview[]="stadium_04";
   std::memcpy(base+tables+168,name,sizeof(name));
@@ -127,7 +129,9 @@ extern "C" bool pes6_stadium_bundle(PPCContext& ctx,uint8_t* base){
   const uint32_t request=ctx.r3.u32,key=REX_LOAD_U32(request+8);
   const bool preview=key==0x02000002u;
   const auto config=REX_LOAD_U32(0x83139360u);
-  const bool wembley=config&&base[config+130]==10;
+  // The selector's shared atlas contains distinct Konami/Wembley frames and
+  // must not depend on a previous match's stadium configuration.
+  const bool wembley=!preview&&config&&base[config+130]==10;
   if(stadiumLightingContext&&config)sunsetOvercast=konamiSunset&&base[config+131]!=0;
   const bool nativeSunsetLight=stadiumLightingContext&&pes6_stadium_sunset()&&config&&base[config+130]<8&&key>=3021&&key<=3073;
   const bool nativeLight=stadiumLightingContext&&!nativeSunsetLight&&config&&base[config+130]<8&&key>=3021&&key<=3073;
@@ -135,7 +139,7 @@ extern "C" bool pes6_stadium_bundle(PPCContext& ctx,uint8_t* base){
   const bool lightProfile=lighting||nativeSunsetLight||nativeLight;
   const bool nativePitch=stadiumLightingContext&&config&&base[config+130]<8&&key>=11+unsigned(base[config+130])*4&&key<15+unsigned(base[config+130])*4;
   if(!preview&&!lightProfile&&!nativePitch&&(key<6727||key>6730))return false;
-  if(base[request+121]==1)return false;
+  if(base[request+121]==1&&(key<6727||key>6730))return false;
   const bool winter=!preview&&!lightProfile&&config&&base[config+133]!=0;
   const unsigned nativeVariant=preview||lightProfile?0:nativePitch?(key-11)%4:key-6727;
   // The guest request table is hour*2+weather. External assets are instead
@@ -143,10 +147,13 @@ extern "C" bool pes6_stadium_bundle(PPCContext& ctx,uint8_t* base){
   // weather directly, including drizzle/torrential, rather than guessing it
   // from resource-key parity. Wet dusk deliberately uses the full wet-day set.
   const bool wet=config&&base[config+131]!=0;
+  // Only affected native venues need a private corrected rain/dusk atlas.
+  // Keep the visible sky/scene variant at wet DAY and preserve DAY resources.
+  const bool privateWetDusk=nativePitch&&konamiSunset&&wet&&(stadium_dusk_wet_pitch_mask&(1u<<unsigned(base[config+130])));
   const unsigned variant=preview||lightProfile?0:
     config?(konamiSunset?(wet?2:4):(wet?2:0)+(stadiumNight?1:0)):
     ((nativeVariant&1)*2+(nativeVariant>>1));
-  const unsigned index=nativeLight?208+key-3021:nativePitch?82+unsigned(base[config+130])*12+(winter?6:0)+variant:nativeSunsetLight?29+key-3021:lighting?(wembley?192+key-3021:17+key-3021):wembley?(preview?190:178+(winter?6:0)+variant):preview?12:winter?6+variant:variant;
+  const unsigned index=nativeLight?208+key-3021:nativePitch?82+unsigned(base[config+130])*12+(winter?6:0)+(privateWetDusk?5:variant):nativeSunsetLight?29+key-3021:lighting?(wembley?192+key-3021:17+key-3021):wembley?(preview?190:178+(winter?6:0)+variant):preview?12:winter?6+variant:variant;
   if(!preview&&!lightProfile&&!nativePitch)literalVariant=variant;
   static std::mutex mutex;std::lock_guard lock(mutex);
   static std::array<std::vector<uint8_t>,272> cache;
@@ -155,7 +162,7 @@ extern "C" bool pes6_stadium_bundle(PPCContext& ctx,uint8_t* base){
     wchar_t exe[MAX_PATH]{};GetModuleFileNameW(nullptr,exe,MAX_PATH);
     auto root=std::filesystem::path(exe).parent_path();
     for(unsigned i=0;i<6&&!std::filesystem::exists(root/"game/cv.img");i++)root=root.parent_path();
-    auto file=nativeLight?root/"data/stadiums/native-lighting"/("lighting-"+std::to_string(key)+".bundle"):nativePitch?root/"data/stadiums/pes2009-pitches"/("stadium-"+std::to_string(base[config+130]))/("variant-"+std::to_string(variant)+(winter?"-winter":"")+".bundle"):
+    auto file=nativeLight?root/"data/stadiums/native-lighting"/("lighting-"+std::to_string(key)+".bundle"):nativePitch?root/"data/stadiums/pes2009-pitches"/("stadium-"+std::to_string(base[config+130]))/((privateWetDusk?std::string("variant-dusk-wet"):"variant-"+std::to_string(variant))+(winter?"-winter":"")+".bundle"):
       root/(nativeSunsetLight?"data/stadiums/sunset":wembley?"data/stadiums/wembley":"data/stadiums/konami")/(nativeSunsetLight?"lighting-"+std::to_string(key)+".bundle":lighting?"lighting-"+std::to_string(key-3021)+".bundle":preview?"preview.bundle":"variant-"+std::to_string(variant)+(winter?"-winter":"")+".bundle");
     if(wembley&&winter&&!std::filesystem::exists(file)){
       file=root/"data/stadiums/wembley"/("variant-"+std::to_string(variant)+".bundle");
@@ -174,7 +181,7 @@ extern "C" bool pes6_stadium_bundle(PPCContext& ctx,uint8_t* base){
   if(!output){ctx.r3.u64=0;return true;}
   std::memcpy(base+output,bytes.data(),bytes.size());
   // Step2 acts on this private copy, never on cached/original profiles.
-  if(lightProfile&&(stadiumNight||wet||konamiSunset))StadiumAdjustLight(base+output,bytes.size());
+  if(lightProfile&&(wembley||stadiumNight||wet||konamiSunset))StadiumAdjustLight(base+output,bytes.size(),wembley);
   const auto previous=REX_LOAD_U32(request+16),input=ctx.r4.u32;
   if(base[request+24]&&input){PPCContext release=ctx;release.r3.u64=input;sub_82A00AB0(release,base);}
   REX_STORE_U32(request+16,output);REX_STORE_U32(request+20,uint32_t(bytes.size()));
@@ -372,7 +379,7 @@ extern "C" void pes6_stadium_literal_load(PPCContext& ctx,uint8_t* base){
     if(pass==31){
       const auto n=REX_LOAD_U32(data+64),groups=REX_LOAD_U32(data+68);
       for(uint32_t j=0;j<n;j++){
-        auto s=LiteralName(base,data+groups+j*48);if(s.size()>3&&(s[0]=='g'||s[0]=='i'))s=s.substr(3);
+        auto s=LiteralName(base,data+groups+j*48);if(s.size()>3&&(s[0]=='g'||s[0]=='i')&&s[1]>='0'&&s[1]<='9')s=s.substr(3);
         if(s=="champio")s=j==7?"champion1":"champion2";
         // PES2008's vision group is the video screen. PES6 calls its
         // corresponding native render target10400; it has no named group.
@@ -408,7 +415,7 @@ extern "C" bool pes6_stadium_literal_draw(PPCContext& ctx,uint8_t* base){
   // over them. Keep dynamic actor/ball/net shadows and all other passes.
   if(!drawingLiteral&&stadiumLightingContext){
     const auto config=REX_LOAD_U32(0x83139360u);
-    if(config&&!EditedPitch(base)&&base[config+130]<8&&base[config+130]!=5&&pes6_stadium_lighting_hour(base,base[config+132])==0){
+    if(config&&!EditedPitch(base)&&(base[config+130]<8||base[config+130]==10)&&base[config+130]!=5&&pes6_stadium_lighting_hour(base,base[config+132])==0){
       const auto scene=REX_LOAD_U32(0x831393A8u),records=scene?REX_LOAD_U32(scene+472):0;
       if(records&&ctx.r3.u32==records+14*20)return true;
     }
@@ -485,7 +492,7 @@ extern "C" bool pes6_stadium_literal_draw(PPCContext& ctx,uint8_t* base){
         const auto data=REX_LOAD_U32(p.model+12),vg=REX_LOAD_U32(p.instance+252),vb=REX_LOAD_U32(p.instance+256);
         if(data&&vg&&REX_LOAD_U32(data+64)<=256)std::memset(base+vg,1,REX_LOAD_U32(data+64));
         if(data&&vb&&REX_LOAD_U32(data+88)<=256)std::memset(base+vb,1,REX_LOAD_U32(data+88));
-        StadiumLightmapState state(base,pass==51,false,pass==18);
+        StadiumLightmapState state(base,false,false,true);
         PPCContext draw=ctx;draw.r3.u64=p.record;sub_8214D498(draw,base);state.Restore(ctx,base);
       }
       StadiumLightmapState state(base,false,false,true);
@@ -516,8 +523,7 @@ extern "C" bool pes6_stadium_literal_draw(PPCContext& ctx,uint8_t* base){
       const uint32_t nativeGroupsCount=nativeData?REX_LOAD_U32(nativeData+64):0;
       for(size_t j=0;j<p.scoreGroups.size();j++){
         const int k=p.scoreGroups[j];
-        if(isWembley){base[vg+j]=(k==-2||k==0)?1:0;}
-        else{base[vg+j]=k==-2?1:k>=0?(states&&uint32_t(k)<nativeGroupsCount?base[states+k]:uint8_t(k==0||k==7||k==8)):0;}
+        base[vg+j]=k==-2?1:k>=0?(states&&uint32_t(k)<nativeGroupsCount?base[states+k]:uint8_t(k==0||k==3||k==7||k==8)):0;
       }
     }
     const bool advertAlpha=p.pass>=57&&p.pass<=60;
@@ -532,5 +538,9 @@ extern "C" bool pes6_stadium_literal_draw(PPCContext& ctx,uint8_t* base){
 
 extern "C" bool pes6_camera_is_cinematic(uint8_t*);
 extern "C" bool pes6_stadium_skip_cinematic_shade(uint8_t* base){
-  return stadiumLightingContext&&pes6_camera_is_cinematic(base);
+  // User test: restore the original cinematic stencil-shadow composition.
+  (void)base;return false;
 }
+
+
+#include "native_net_motion.inl"

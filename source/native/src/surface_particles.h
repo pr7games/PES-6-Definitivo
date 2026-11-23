@@ -28,7 +28,7 @@ struct KickContact {
   }
 };
 struct TurfDebris {
-  std::array<TurfPiece,debris_limit> particles{};unsigned next=0,budget=100;
+  std::array<TurfPiece,debris_limit> particles{};unsigned next=0,budget=110;
   uint32_t random=0x6a55b39u;
   float Random(){random^=random<<13;random^=random>>17;random^=random<<5;return float(random&65535)/65535.f;}
   void Reset(){particles={};next=0;budget=100;}
@@ -39,14 +39,16 @@ struct TurfDebris {
   }
   void Burst(Vec origin,Vec direction={},bool slide=false,unsigned requested=50){
     if(!Field(origin.x,origin.z))return;
-    // Fifty pieces per burst:30grass +20soil, in every climate.
+    // Keep the original grass/soil burst and append five random soil clods.
     // Length references the water BEFORE its latest5% increase.
+    const unsigned base_count=requested;
+    requested+=5;
     const unsigned count=budget>=requested?requested:0;budget-=count;
     const float speed=std::hypot(direction.x,direction.z),dx=speed>0?direction.x/speed:0,dz=speed>0?direction.z/speed:0;
     for(unsigned i=0;i<count;i++){
       const float angle=Random()*6.283185307f,spread=.7f+Random()*1.2f;
       const float vx=std::cos(angle)*spread,vz=std::sin(angle)*spread;
-      auto& p=particles[next++%debris_limit];p.soil=i%5<2;
+      auto& p=particles[next++%debris_limit];p.soil=i>=base_count||i%5<2;
       const float forward=speed>0?.22f+Random()*.28f:0.f;
       const float lateral=(Random()-.5f)*.18f;
       p.p={origin.x+dx*forward-dz*lateral+std::cos(angle)*.04f,

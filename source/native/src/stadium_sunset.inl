@@ -17,10 +17,24 @@ unsigned StadiumLightGain(){
  if(stadiumLightGainPercent<0){int value=115;std::ifstream in(SunsetRoot()/"data/stadiums/lighting-gain-percent.txt");int requested=0;if(in>>requested)value=std::clamp(requested,100,140);stadiumLightGainPercent=value;}
  return unsigned(stadiumLightGainPercent);
 }
-void StadiumAdjustLight(uint8_t* bytes,size_t size){
+void StadiumAdjustLight(uint8_t* bytes,size_t size,bool wembley=false){
+
  const auto be=[&](size_t at){return uint32_t(bytes[at])<<24|uint32_t(bytes[at+1])<<16|uint32_t(bytes[at+2])<<8|bytes[at+3];};
  if(size<32||be(0)!=2||be(4)!=8||be(12)!=204)return;
  const uint64_t offset=be(8);if(offset+204>size)return;
+ // Wembley retains native direction and direct RGB, with an ambient fill
+ // for zero-ambient light endpoints. Directional back faces must not go black.
+ if(wembley)for(unsigned light=0;light<3;light++)for(unsigned state=0;state<2;state++)for(unsigned c=0;c<3;c++){
+  const auto key=size_t(offset)+light*40+4+state*18+c*2,ambient=key+6;
+  const unsigned direct=unsigned(bytes[key])<<8|bytes[key+1],old=unsigned(bytes[ambient])<<8|bytes[ambient+1];
+  // A shaded endpoint can have direct=0: deriving its fill from itself
+  // leaves imported stands black. Use this same hour/weather profile's
+  // lit endpoint as the reference, preserving hue and directional lighting.
+  const auto lit=size_t(offset)+light*40+4+c*2;
+  const unsigned reference=std::max(direct,(unsigned(bytes[lit])<<8)|bytes[lit+1]);
+  const unsigned filled=std::max(old,(reference*60u+50u)/100u);
+  bytes[ambient]=uint8_t(filled>>8);bytes[ambient+1]=uint8_t(filled);
+ }
  const auto gain=StadiumLightGain();if(gain==100)return;
  for(unsigned light=0;light<3;light++)for(unsigned state=0;state<2;state++)for(unsigned term=0;term<2;term++)for(unsigned c=0;c<3;c++){
   const auto at=size_t(offset)+light*40+4+state*18+term*6+c*2;
@@ -100,3 +114,4 @@ extern "C" void pes6_stadium_time_ready(PPCContext& ctx,uint8_t* base,uint32_t o
  const auto item=SunsetNative(ctx,base,sub_8272E4B0,list,0,1),texts=item?REX_LOAD_U32(item+312):0,text=texts?REX_LOAD_U32(texts):0;
  if(text)SunsetNative(ctx,base,sub_827378E8,text+96,sunsetLabels+32);SunsetNative(ctx,base,sub_82740098,combo,selected<count?selected:2);
 }
+

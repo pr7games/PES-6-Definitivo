@@ -1,6 +1,7 @@
 #include "../generated/default/pes6_pch.h"
 #include "../generated/default/pes6_funcs.h"
 #include "player_editor_runtime.h"
+#include "licensed_southamerica_names.h"
 #include "setpiece_gameplay.h"
 #include "boot_catalog.h"
 #include "player_hair_fields.h"
@@ -346,6 +347,11 @@ Snapshot ReadPlayer(uint16_t id) {
     s.appearance.push_back({field,label,std::move(choices),selected,true});
   }
   const bool build=c.face_mode==0||p->face_kind!=1;
+  for(const auto& component:face_component_types){
+    std::vector<std::string> options{"Actual / personalizado"};
+    for(unsigned i=0;i<component.types.size();i++)options.push_back("Tipo "+std::to_string(i+1));
+    s.appearance.push_back({component.id,component.label,std::move(options),build?FaceComponentSelection(c,p->face,component):0,true});
+  }
   for(unsigned i=0;i<face_fields.size();i++){
     const auto& field=face_fields[i];std::vector<std::string> choices;
     const int current=c.face[i]==face_unset?p->face[i]:c.face[i];
@@ -426,6 +432,12 @@ bool Apply(const Request& r) {
   else if(r.action==Action::Appearance&&r.field=="face_mode"){
     if(r.value<0||r.value>1){changes=saved;return false;}
     c.face_mode=r.value==1?0:-1;
+  }
+  else if(r.action==Action::Appearance&&FindFaceComponentType(r.field)!=face_component_types.end()){
+    const auto& component=*FindFaceComponentType(r.field);
+    if(r.value<0||r.value>int(component.types.size())){changes=saved;return false;}
+    if(!r.value)ResetFaceComponent(c,component);
+    else{c.face_mode=0;for(unsigned i=0;i<component.count;i++)c.face[component.fields[i]]=component.types[r.value-1][i];}
   }
   else if(r.action==Action::Appearance&&r.field.starts_with("face_")){
     const auto field=FindFaceField(r.field);
@@ -519,7 +531,13 @@ extern "C" void pes6_editor_frame(uint8_t* base) {
   if(db==observed_db&&applied_revision==revision&&(!open.load()||!catalog->players.empty()))return;
   const bool new_db=db!=observed_db;
   // Retain originals for reset, per loaded database, never across guest loads.
-  if(new_db){ClearExtendedPenalties();if(original_db!=db){original.clear();original_db=db;}appearance_copies.clear();head_identity_db=0;decoded_hair_tints.clear();observed_db=db;}
+  if(new_db){ClearExtendedPenalties();if(original_db!=db){original.clear();original_db=db;}appearance_copies.clear();head_identity_db=0;decoded_hair_tints.clear();observed_db=db;
+    for(const auto& entry:licensed_southamerica_names){
+      const uint32_t rec=db+152u*entry.id;
+      std::memset(base+rec+4,0,46);std::memcpy(base+rec+4,entry.name,std::min<size_t>(45,std::strlen(entry.name)));
+      std::memset(base+rec+50,0,16);std::memcpy(base+rec+50,entry.jersey,std::min<size_t>(15,std::strlen(entry.jersey)));
+    }
+  }
   for(const auto& [id,c]:changes){const uint32_t record=db+152u*id;
     if(Name(base,record)!=c.name)continue;
     CaptureOriginal(base,db,id);
@@ -756,8 +774,14 @@ extern "C" void pes6_editor_groups(PPCContext& ctx,uint8_t* base) {
        (REX_LOAD_U32(kit+20)==138||REX_LOAD_U32(kit+20)==139))||
       ((base[kit]==22||base[kit]==25)&&REX_LOAD_U32(kit+12)==72&&
        (REX_LOAD_U32(kit+20)==144||REX_LOAD_U32(kit+20)==145)));
-    const bool show=pes6::crest::Visible(base[kit],pes6::crest::Mode(kit),legacy);
-    ctx=saved;ctx.r3.u64=object;ctx.r4.u64=7;ctx.r5.u64=show?0x40001111u:0x40000000u;
+    const int crestMode=pes6::crest::Mode(kit);
+    // Front badges have been separated from torso groups into group 7.
+    // Keep them enabled for original kits, disabled for crest_mode=2 kits.
+    // Native isolated front: LOD0 only; adapted 22/25: LOD0 and LOD1.
+    // Other LODs retain original hidden group 7; never force rear packets on.
+    const bool show=pes6::crest::Visible(base[kit],crestMode,legacy);
+    const bool adapted=(base[kit]==22||base[kit]==25);
+    ctx=saved;ctx.r3.u64=object;ctx.r4.u64=7;ctx.r5.u64=(show&&adapted)?0x40000011u:0x40000000u;
     sub_821A6F78(ctx,base);
   }
   // Only switch the torso. Groups 8/9 are optional kit decals, NOT required

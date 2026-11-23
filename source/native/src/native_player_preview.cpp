@@ -47,7 +47,7 @@ struct Preview {
   std::array<uint8_t,48> appearance{};
   float actor_height=1.80f,next_actor_height=1.80f;
 } state;
-struct WarmCache {bool motions=false,metadata=false;int team=-1;uint32_t variant=0;unsigned kit_flags=0;};
+struct WarmCache {bool motions=false,metadata=false,kit_pending=false;int team=-1;uint32_t variant=0;unsigned kit_flags=0;ULONGLONG kit_queued_at=0;};
 WarmCache warm;
 int kit_team=-1;
 unsigned kit_variant=0;
@@ -138,7 +138,7 @@ bool ManagersReady(uint8_t* base){
 void PrepareTeam(PPCContext& ctx,uint8_t* base){
   if(!ManagersReady(base))return;
   const unsigned team=kit_team>=0?unsigned(kit_team):REX_LOAD_U32(0x831398A0u)&0xffff;
-  const unsigned flags=kit_team>=0&&kit_variant>=2&&kit_variant<4?9u:0u;
+  const unsigned flags=kit_team>=0&&kit_variant>=2&&kit_variant<4?0x3Fu:0u;
   if(team>=256||(warm.team==int(team)&&warm.kit_flags==flags))return;
   if(!warm.variant)warm.variant=Alloc(ctx,base,8);
   if(!warm.variant)return;
@@ -146,7 +146,7 @@ void PrepareTeam(PPCContext& ctx,uint8_t* base){
   if(warm.team>=0)for(unsigned keeper:{0u,1u})Call(ctx,base,sub_822F3A78,keeper,unsigned(warm.team),warm.variant);
   base[warm.variant]=uint8_t(flags);
   for(unsigned keeper:{0u,1u})Call(ctx,base,sub_822F3720,keeper,team,warm.variant);
-  warm.team=int(team);warm.kit_flags=flags;Log("team kit prefetch queued");
+  warm.team=int(team);warm.kit_flags=flags;warm.kit_queued_at=GetTickCount64();warm.kit_pending=true;Log("team kit prefetch queued");
 }
 void StartActor(PPCContext& ctx,uint8_t* base,uint32_t appearance,bool staging=false){
   Pes6EditorPreviewScope preview_scope;
@@ -161,7 +161,7 @@ void StartActor(PPCContext& ctx,uint8_t* base,uint32_t appearance,bool staging=f
   const auto db=REX_LOAD_U32(0x83139440u),record=db+152u*state.player;
   const bool auto_role=kit_team<0||kit_variant>=4;
   const unsigned role=auto_role?((base[record+73]&15u)==0?0u:1u):(kit_variant&1u);
-  base[state.scratch]=(!auto_role&&kit_variant>=2)?uint8_t(role?1:8):0;
+  base[state.scratch]=(!auto_role&&kit_variant>=2)?uint8_t(role?0x07u:0x38u):0;
   Call(ctx,base,sub_822FB9E8,kit,role,team,state.scratch);
   REX_STORE_U32(actor+1344,role);
   // Native kit-name generator consumes a C string, not an external-kit path.
@@ -489,7 +489,10 @@ void Enter(PPCContext& ctx,uint8_t* base,uint16_t player,int team,unsigned varia
   state.player=player;state.phase=1;state.scratch=Alloc(ctx,base,64);state.last=GetTickCount64();
   pes6_editor_preview_active.store(1,std::memory_order_release);
   if(state.scratch){const uint32_t sentinel=state.scratch+32;REX_STORE_U32(state.scratch+20,sentinel);REX_STORE_U32(sentinel,sentinel);REX_STORE_U32(sentinel+4,sentinel);}
-  PrepareMotions(ctx,base);PrepareTeam(ctx,base);Log("enter");
+  PrepareMotions(ctx,base);PrepareTeam(ctx,base);
+  if(warm.kit_pending&&state.actor&&GetTickCount64()-warm.kit_queued_at>=250){
+    warm.kit_pending=false;state.dirty=true;state.rebuild=true;state.changed=GetTickCount64();
+  }Log("enter");
 }
 void SwitchPlayer(uint16_t player){
   if(!player||state.player==player)return;
@@ -597,6 +600,9 @@ void Tick(PPCContext& ctx,uint8_t* base){
   if(!state.player||!state.scratch||state.phase==5||!ManagersReady(base))return;
   const auto appearance=Appearance(base);if(!appearance)return;
   PrepareMotions(ctx,base);PrepareTeam(ctx,base);
+  if(warm.kit_pending&&state.actor&&GetTickCount64()-warm.kit_queued_at>=250){
+    warm.kit_pending=false;state.dirty=true;state.rebuild=true;state.changed=GetTickCount64();
+  }
   if(state.pending_file&&Call(ctx,base,sub_822719A8,state.pending_bank)){
     unsigned clip=state.pending_initial?state.pending_initial:state.pending_base;state.pending_initial=0;
     if(state.pending_action){const auto action=Call(ctx,base,sub_825F16A8,state.pending_action);if(action>=1730&&action<1755)clip=action;}

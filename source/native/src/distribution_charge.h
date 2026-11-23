@@ -3,7 +3,7 @@
 
 // Shares the approved A/Y clock and HUD format. Open-play lofted balls use
 // native initialization and charge accumulation; kind2: keeper hands (ball538=5);
-// kind3: native restarts44/45; kind4: native action9 centre preparation.
+// kind3: native restarts44/45; kind4 is reserved (running centres restored).
 struct Pes6DistributionGauge {
  uint32_t match=0,actor=0,team=0,start=0,last=0,release=0,button=0,deliveryTick=0;
  unsigned power=16,kind=0,action=0; bool active=false,held=false,pending=false,delivered=false,consumed=false,latched=false;
@@ -56,34 +56,8 @@ inline bool pes6_distribution_wait_loft(uint8_t* base,uint32_t wrapper){
  const uint32_t keys=REX_LOAD_U32(actor+280);
  return (keys&0x2000u)&&!(keys&0xD200u)&&REX_LOAD_U8(actor+201)<128;
 }
-// Called only inside native action9 state1, after initialization/cancellation and
-// before its animation/target preparation. Action8 and its state2 fallback into9
-// never start this gauge: long switches keep their existing native charge.
-inline bool pes6_distribution_wait_cross(uint8_t* base,uint32_t wrapper){
- const uint32_t actor=REX_LOAD_U32(REX_LOAD_U32(wrapper));
- if(!actor||REX_LOAD_U8(actor+160)!=0)return false;
- const unsigned pad=REX_LOAD_U8(actor+195);if(pad>=4)return false;
- const uint32_t match=pes6_gameplay_match(base);if(!match)return false;
- auto& s=pes6DistributionGauges[pad];if(s.match&&s.match!=match)s={};
- pes6_distribution_update(base,s,pad);
- const uint32_t keys=pes6_gameplay_pad_held(base,pad);
- if(!s.active&&!s.latched&&REX_LOAD_U8(actor+144)==9&&REX_LOAD_U16(actor+146)==1&&
-    REX_LOAD_U8(match+244)==REX_LOAD_U8(actor+128)&&(keys&0x2000u)&&!(keys&0xD200u))
-  pes6_distribution_start(base,s,actor,0x2000u,4,9);
- if(!s.active||s.actor!=actor||s.kind!=4)return false;
- REX_STORE_U8(actor+201,s.power);
- return s.held;
-}
-// Apply the released centre charge to initial horizontal velocity, inside the
-// centre's own contact function. Keep its native direction, loft/flight time,
-// spin and animation. Full charge is exactly100% of the original launch speed.
-inline void pes6_distribution_cross_launch(uint8_t* base,PPCContext& ctx){
- auto* s=pes6_distribution_pending(base,ctx.r3.u32);
- if(!s||s->kind!=4||ctx.r5.s32<=0)return;
- const int64_t percent112=40*112+int64_t(s->power-16)*60;
- ctx.r5.s64=int64_t(ctx.r5.s32)*percent112/(100*112);
- s->pending=false;s->consumed=true;s->release=REX_LOAD_U32(s->match+2152);
-}
+// Running centres use unmodified native preparation and contact.
+// The former kind4 charge is retired; no centre gauge is started here.
 // Called after native human input. Only the distribution button is postponed;
 // direction, camera, animation, clock and game state continue to run normally.
 inline void pes6_distribution_input(uint8_t* base,uint32_t actor){

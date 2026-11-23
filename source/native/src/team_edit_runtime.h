@@ -121,6 +121,7 @@ inline void PatchModels(uint8_t* base,unsigned team,uint32_t record){
  for(unsigned v=0;v<4;v++){for(auto offset:design_offsets)base[record+v*108+offset]=original[v*108+offset];base[record+v*108+101]=original[v*108+101];}
  if(U16(base,record+104)==0xffff)for(unsigned v=0;v<4;v++)for(unsigned slot=0;slot<8;slot++)if(designs[team][v][slot]>=0)base[record+v*108+design_offsets[slot]]=uint8_t(designs[team][v][slot]);
  for(unsigned v=0;v<4;v++)if(models[team][v][0]>=0){base[record+v*108+101]=uint8_t(models[team][v][0]);base[record+v*108+84]=uint8_t(models[team][v][1]);}
+ if(team==19||team==45){static constexpr uint8_t n[6]{1,1,2,1,1,1};for(unsigned v=0;v<4;v++)std::memcpy(base+record+v*108+92,n,6);}
 }
 inline void PatchColors(uint8_t* base,unsigned team,uint32_t record){
  Load();if(team>=colors.size()||(!color_changes[team]&&!color_touched[team])||!Readable(base,record,432)||U16(base,record+104)!=0xffff)return;

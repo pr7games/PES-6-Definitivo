@@ -2,6 +2,7 @@
 #include "player_editor.h"
 #include "player_body_fields.h"
 #include "player_face_fields.h"
+#include "face_component_types.h"
 #include "player_nationalities.h"
 #include <atomic>
 #include <memory>

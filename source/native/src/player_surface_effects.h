@@ -1,6 +1,6 @@
 #pragma once
 // Included inside game_weather's namespace after checked guest access helpers.
-struct PlayerSurfaceVertex {Vec p{},n{};std::array<unsigned,4> bone{};std::array<float,4> weight{};Vec uv{};bool has_uv=false;};
+struct PlayerSurfaceVertex {Vec p{},n{};std::array<unsigned,4> bone{};std::array<float,4> weight{};Vec uv{};bool has_uv=false,sleeve_motion=false;};
 struct PlayerSurfaceSample {std::array<PlayerSurfaceVertex,3> triangle;Vec bary{};float size=0;unsigned region=1,group=0,selector=0;bool cloth_hem=false,print_overlay=false;};
 using FaceGrid=std::array<std::vector<unsigned>,256>;
 struct PlayerSurfaceModel {bool face=false,pants=false,hair=false;unsigned bones=0,resident=0,size=0,rejection=1,groups=0,selectors=0;uint64_t revision=0;std::vector<PlayerSurfaceSample> samples,skin;std::vector<unsigned> dirt_groups,dirt_selectors;std::shared_ptr<FaceGrid> face_grid;std::array<float,13> hairline{},forehead{};float eye_top=0;};
@@ -8,7 +8,7 @@ bool GarmentCompatible(unsigned sample,unsigned patch){
   return sample==patch||(sample<2&&patch<2)||
     (sample<2&&patch>=4&&patch<6)||(patch<2&&sample>=4&&sample<6);
 }
-struct DirtPatch {Vec center{},normal{};float strength=0;unsigned region=1;uint32_t event=0;float contact_score=1e9f;uint32_t birth_tick=0;Vec uv{};uint64_t source_model=0;bool has_uv=false;};
+struct DirtPatch {Vec center{},normal{};float strength=0;unsigned region=1;uint32_t event=0;float contact_score=1e9f;uint32_t birth_tick=0;Vec uv{};uint64_t source_model=0;bool has_uv=false,sleeve_motion=false;};
 constexpr unsigned dirt_region_count=10,dirt_patch_limit=30;
 constexpr std::array<unsigned,dirt_region_count> dirt_region_limits{5,6,2,2,1,1,2,2,1,1};
 struct DirtClimate {float shirt_width,pants_width,shirt_height,pants_height,shirt_low,shirt_high,pants_low,pants_high;};
@@ -405,7 +405,7 @@ PlayerSurfaceModel BuildPlayerSurfaceModel(uint8_t* base,uint32_t data){
     }
     if(pos<0||normal<0||bone_indices<0)continue;
     const auto vertex=[&](unsigned index){
-      PlayerSurfaceVertex v;const auto at=vb+index*stride;
+      PlayerSurfaceVertex v;v.sleeve_motion=((REX_LOAD_U32(packet+8)==24||REX_LOAD_U32(packet+8)==25)&&palette_count==6)||((REX_LOAD_U32(packet+8)==36||REX_LOAD_U32(packet+8)==37)&&palette_count==13);const auto at=vb+index*stride;
       v.p=Position(base,at+pos);v.n=Position(base,at+normal);
       if(uv>=0){v.uv={Float(base,at+uv),Float(base,at+uv+4),0};v.has_uv=std::isfinite(v.uv.x)&&std::isfinite(v.uv.y);}
       // Low-detail rigid packets omit explicit weights: their sole palette
@@ -574,8 +574,14 @@ void CapturePlayerSurface(uint8_t* base,uint32_t instance){
     if(!matrix_ready[bone]){native_matrices[bone]=read_matrix(matrices+bone*64);matrix_ready[bone]=true;}
     return point(native_matrices[bone],p);
   };
+  std::array<float,6> sleeve_offsets{};bool sleeve_ready=false,sleeve_active=false;
+  const auto sleeve_point=[&](const PlayerSurfaceVertex& v,unsigned bone,Vec p){
+    if(!v.sleeve_motion||bone<18||bone>25)return p;
+    if(!sleeve_ready){sleeve_active=pes6_cloth_sleeve_offsets(base,instance,matrices,sleeve_offsets.data());sleeve_ready=true;}
+    if(sleeve_active){const unsigned side=bone==19||bone==22||bone==23||bone==25?1:0;const float factor=bone==24||bone==25?1.f:bone==21||bone==23?.85f:bone==20||bone==22?.35f:.20f;const auto* d=sleeve_offsets.data()+side*3;p=Add(p,Mul(Vec{d[0],d[1],d[2]},factor));}return p;
+  };
   const auto native_skin=[&](const PlayerSurfaceVertex& v){Vec out{};
-    for(unsigned i=0;i<4;i++)if(v.weight[i]>0)out=Add(out,Mul(native_point(v.bone[i],v.p),v.weight[i]));return out;};
+    for(unsigned i=0;i<4;i++)if(v.weight[i]>0)out=Add(out,Mul(sleeve_point(v,v.bone[i],native_point(v.bone[i],v.p)),v.weight[i]));return out;};
   std::array<float,72> cloth_palette{};
   bool cloth_palette_ready=false,cloth_override=false;
   const auto skin=[&](const PlayerSurfaceSample& sample,const PlayerSurfaceVertex& v){
@@ -591,7 +597,7 @@ void CapturePlayerSurface(uint8_t* base,uint32_t instance){
       const auto bone=v.bone[i];Vec point;
       if(bone>=28&&bone<=33){const auto* p=cloth_palette.data()+(bone-28)*12;
         point={p[0]*v.p.x+p[3]*v.p.y+p[6]*v.p.z+p[9],p[1]*v.p.x+p[4]*v.p.y+p[7]*v.p.z+p[10],p[2]*v.p.x+p[5]*v.p.y+p[8]*v.p.z+p[11]};
-      }else point=native_point(bone,v.p);
+      }else point=sleeve_point(v,bone,native_point(bone,v.p));
       out=Add(out,Mul(point,v.weight[i]));
     }return out;
   };
@@ -858,3 +864,4 @@ void CapturePlayerSurfaceOnce(uint8_t* base,uint32_t instance){
   // reuse a posed mesh from another camera merely because simulation paused.
   *selected={instance,tick,player_surface_capture_epoch,player_surface_view_epoch,last_cursor,replay_mode,signature};CapturePlayerSurface(base,instance);
 }
+

@@ -21,7 +21,6 @@
 #include "frame_meter.h"
 #include "host_frame_pacer.h"
 #include "presentation_cadence.h"
-#include "gameplay_perf_capture.h"
 #include "player_editor_runtime.h"
 #include "team_edit_runtime.h"
 #include "kit_lettering_runtime.h"
@@ -148,10 +147,6 @@ extern "C" void pes6_override_afs_language(PPCContext& ctx) {
 
 extern "C" void pes6_replay_transition_trace(PPCContext&,uint8_t*,unsigned);
 extern "C" REX_FUNC(__imp__VdSwap) {
-  auto& perf = pes6_gameplay_perf::Get();
-  const bool capture = perf.Enabled();
-  const uint64_t perf_start = capture ? pes6_gameplay_perf::Now() : 0;
-  pes6_replay_transition_trace(ctx,base,9);
   pes6_editor_frame(base);
   using Swap = void (*)(PPCContext&, uint8_t*);
   static const Swap original = [] {
@@ -173,21 +168,17 @@ extern "C" REX_FUNC(__imp__VdSwap) {
     REXLOG_INFO("PES6 actual frontbuffer: {}x{}; GPU scale={}", width, height,
         pes6_render_scale.load(std::memory_order_relaxed));
   }
-  const uint32_t perf_interval = pes6_requested_interval.load(std::memory_order_relaxed);
-  const uint64_t perf_before_pace = capture ? pes6_gameplay_perf::Now() : 0;
   pes6_pace_submission();
-  const uint64_t perf_before_swap = capture ? pes6_gameplay_perf::Now() : 0;
   original(ctx,base);
-  if (capture) perf.Record(perf_start, perf_before_pace, perf_before_swap,
-      pes6_gameplay_perf::Now(), perf_interval, width, height);
   pes6_frame_submissions.fetch_add(1,std::memory_order_relaxed);
 }
 
+extern "C" bool pes6_keyboard_active();
 extern "C" REX_FUNC(__imp__XamInputGetState) {
   const uint32_t state = ctx.r5.u32;
   static const auto original = FindRuntimeImport("__imp__XamInputGetState");
   original(ctx, base);
-  if (pes6::editor::open.load(std::memory_order_relaxed) && ctx.r3.u32 == 0 && state)
+  if ((pes6::editor::open.load(std::memory_order_relaxed)||pes6_keyboard_active()) && ctx.r3.u32 == 0 && state)
     std::memset(base + state + 4, 0, 12);
 }
 
@@ -248,7 +239,8 @@ extern "C" bool pes6_load_expanded_boot(PPCContext& ctx,uint8_t* base){
   const bool ballMenu=REX_LOAD_U32(request+8)==id&&id>=184&&id<=188;
   const bool customBall=ballPreview||ballMenu||(REX_LOAD_U32(request+8)==id&&id>=6731&&id<=6734);
   const bool customBoot=id>=pes6::editor::custom_boot_first_entry&&id<pes6::editor::custom_boot_first_entry+pes6::editor::custom_boot_count;
-  if(!customEditorAsset&&!customBoot&&!customCrest&&!customKit&&!customFont&&!customBall&&base[request+121]!=1&&ctx.r4.u32&&ctx.r5.u32>=16){
+  const bool customStadium=(id>=6727&&id<=6730)||(id>=3021&&id<=3073)||id==0x02000002u;
+  if(!customEditorAsset&&!customBoot&&!customCrest&&!customKit&&!customFont&&!customBall&&!customStadium&&base[request+121]!=1&&ctx.r4.u32&&ctx.r5.u32>=16){
     const auto input=ctx.r4.u32;
     MEMORY_BASIC_INFORMATION info{};
     if(VirtualQuery(base+input,&info,sizeof(info))&&info.State==MEM_COMMIT&&
@@ -311,6 +303,7 @@ extern "C" bool pes6_editor_name_resource(PPCContext& ctx,uint8_t* base){return 
 extern "C" bool pes6_editor_number_resource(PPCContext& ctx,uint8_t* base){return pes6_team_info::LetteringResource(ctx,base,true);}
 extern "C" void pes6_editor_copy_lettering(PPCContext& ctx,uint8_t*){pes6_team_info::CopyLettering(ctx.r3.u32,ctx.r4.u32);}
 extern "C" bool pes6_editor_lettering_recolor(uint32_t descriptor,bool numbers){return pes6_team_info::LetteringRecolor(descriptor,numbers);}
+extern "C" bool pes6_editor_lettering_nativo(uint8_t* base,uint32_t descriptor,uint32_t texA,uint32_t texB,bool numbers){return pes6_team_info::LetteringNativo(base,descriptor,texA,texB,numbers);}
 extern "C" void pes6_editor_kit_model(PPCContext& ctx,uint8_t* base){
  unsigned team=ctx.r5.u32&0xffffu;if(team==214||team==215){if(!pes6_team_info::Readable(base,0x83139448,4))return;const auto match=pes6_team_info::U32(base,0x83139448);if(!pes6_team_info::Readable(base,match,12))return;const auto object=pes6_team_info::U32(base,match+(team==214?4:8));if(!pes6_team_info::Readable(base,object,8))return;team=pes6_team_info::U16(base,object+6);}
  if(team>=189||!pes6_team_info::Readable(base,0x83139440,4))return;const auto db=pes6_team_info::U32(base,0x83139440);if(!db)return;
@@ -356,13 +349,72 @@ extern "C" void pes6_apply_real_team_names(PPCContext& ctx,uint8_t* base){
 #include "premier_crest_map.h"
 #include "competition_logo_runtime.h"
 #include "competition_presentation.h"
-#include "replay_transition_trace.h"
+extern "C" void pes6_replay_transition_trace(PPCContext&,uint8_t*,unsigned){}
 #include "competition_texture_source.h"
 #include "soft_crowd.h"
 extern "C" void pes6_competition_texture_source(uint8_t* base,uint32_t source){CompetitionTextureSource(base,source);}
 extern "C" void pes6_soft_crowd_source(uint8_t* base,uint32_t source){CompetitionTextureSource(base,source);SoftCrowdSource(base,source);}
 #include "loading_logo_decode.h"
 extern "C" bool pes6_decode_kit_preview(PPCContext&,uint8_t*);
+#include "overlay_ui_tools.h"
+#include <rex/system/kernel_state.h>
+#include <rex/system/xthread.h>
+#include "xbox_keyboard.h"
+
+namespace {
+pes6::ui_tools::KeyboardState* SharedKeyboard() {
+ if (HMODULE mod = GetModuleHandleW(L"pes6-native-extension.dll")) {
+  using Fn = pes6::ui_tools::KeyboardState* (*)();
+  if (auto fn = reinterpret_cast<Fn>(GetProcAddress(mod, "Pes6GetKeyboardState"))) return fn();
+ }
+ return &pes6::ui_tools::g_keyboard;
+}
+}
+
+extern "C" bool pes6_keyboard_active(){return SharedKeyboard()->active.load(std::memory_order_acquire);}
+extern "C" void pes6_show_keyboard_ui(PPCContext& ctx, uint8_t* base){
+ const uint32_t defPtr = ctx.r5.u32;
+ const uint32_t outPtr = ctx.r8.u32;
+ const uint32_t maxChars = ctx.r9.u32;
+ const uint32_t ovPtr = ctx.r10.u32;
+ if(!outPtr||!maxChars){ctx.r3.u64=87;return;}
+ std::string initial;
+ if(defPtr && maxChars){
+  for(uint32_t i=0; i<maxChars && i<128; i++){
+   uint16_t ch = (uint16_t(base[defPtr + i*2]) << 8) | base[defPtr + i*2 + 1];
+   if(!ch) break;
+   if(ch < 128) initial.push_back(char(ch));
+   else if(ch < 2048){initial.push_back(char(0xc0|(ch>>6)));initial.push_back(char(0x80|(ch&63)));}
+   else {initial.push_back(char(0xe0|(ch>>12)));initial.push_back(char(0x80|((ch>>6)&63)));initial.push_back(char(0x80|(ch&63)));}
+  }
+ }
+ auto& kb = *SharedKeyboard();
+ {
+  std::lock_guard<std::mutex> lock(kb.mutex);
+  if(kb.active.load(std::memory_order_acquire)){ctx.r3.u64=170;return;}
+  kb.text = initial;
+  kb.max_chars = maxChars ? maxChars - 1 : 63;
+  kb.row = 0; kb.col = 1; kb.shift = false; kb.symbols = false; kb.accepted = false;
+  kb.cursor = kb.text.size(); kb.accents = false; kb.left_trigger = kb.right_trigger = true;
+  kb.prev_buttons = 0xFFFF;
+  kb.last_move = GetTickCount64();
+  kb.guest_base = base;
+  kb.out_ptr = outPtr;
+  kb.ov_ptr = ovPtr;
+  kb.finished.store(false, std::memory_order_release);
+  if(ovPtr){REX_STORE_U32(ovPtr,997u);REX_STORE_U32(ovPtr+4,0);REX_STORE_U32(ovPtr+8,rex::system::XThread::GetCurrentThreadHandle());}
+  kb.active.store(true, std::memory_order_release);
+ }
+ if(!ShowXboxKeyboard(kb)){
+  std::lock_guard<std::mutex> lock(kb.mutex);kb.active.store(false);kb.accepted=false;kb.guest_base=nullptr;kb.finished.store(true);
+  if(ovPtr)if(auto* kernel=rex::system::KernelState::shared())kernel->CompleteOverlappedEx(ovPtr,0,1223,0);
+  REXLOG_ERROR("PES6 keyboard: no runtime UI drawer; request cancelled without hiding the game");
+  ctx.r3.u64=ovPtr?997:1223;return;
+ }
+ if(ovPtr)ctx.r3.u64=997;
+ else {while(!kb.finished.load(std::memory_order_acquire))std::this_thread::sleep_for(std::chrono::milliseconds(1));ctx.r3.u64=kb.accepted?0:1223;}
+}
+
 extern "C" bool pes6_decode_premier_crest(PPCContext& ctx,uint8_t* base){
 
  if(DecodeLoadingLogo(ctx,base))return true;
@@ -373,7 +425,7 @@ extern "C" bool pes6_decode_premier_crest(PPCContext& ctx,uint8_t* base){
  const auto length=REX_LOAD_U32(input+8);bool candidate=false;for(const auto& r:premier_crest_sources)if(r.compressed==length)candidate=true;if(!candidate)return false;
  uint64_t hash=14695981039346656037ull;for(uint32_t i=0;i<length;i++)hash=(hash^base[input+16+i])*1099511628211ull;
  unsigned index=0;for(;index<std::size(premier_crest_sources);index++)if(premier_crest_sources[index].compressed==length&&premier_crest_sources[index].hash==hash)break;if(index==std::size(premier_crest_sources))return false;
- static std::mutex mutex;static std::array<std::vector<uint8_t>,40> cache;std::lock_guard lock(mutex);auto& bytes=cache[index];const auto& source=premier_crest_sources[index];
+ static std::mutex mutex;static std::array<std::vector<uint8_t>,std::size(premier_crest_sources)> cache;std::lock_guard lock(mutex);auto& bytes=cache[index];const auto& source=premier_crest_sources[index];
  if(bytes.empty()){wchar_t exe[MAX_PATH]{};GetModuleFileNameW(nullptr,exe,MAX_PATH);auto root=std::filesystem::path(exe).parent_path();for(unsigned i=0;i<6&&!std::filesystem::exists(root/"game/cv.img");i++)root=root.parent_path();std::ifstream file(root/"data/patches/premier-clubs"/(std::to_string(source.team)+"-"+std::to_string(source.size)+".we"),std::ios::binary|std::ios::ate);if(!file||file.tellg()!=16+source.size*source.size*4)return false;bytes.resize(size_t(file.tellg()));file.seekg(0);file.read(reinterpret_cast<char*>(bytes.data()),bytes.size());if(!file||bytes[7]!=32){bytes.clear();return false;}}
  PPCContext alloc=ctx;alloc.r3.u64=bytes.size();alloc.r4.u64=16;sub_82A00AC8(alloc,base);if(!alloc.r3.u32)return false;std::memcpy(base+alloc.r3.u32,bytes.data(),bytes.size());REX_STORE_U32(state+8,input+16);REX_STORE_U32(state+12,alloc.r3.u32);REX_STORE_U32(state+16,length);REX_STORE_U32(state+20,uint32_t(bytes.size()));ctx.r3.u64=1;/* Per-load diagnostic disabled: no disk logging on crest refresh. */return true;
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "player_body_fields.h"
 #include "player_face_fields.h"
+#include "face_component_types.h"
 #include <string_view>
 namespace pes6::editor {
 enum class ResetKind { Boot, Animation, Appearance, Accessory };
@@ -16,6 +17,8 @@ template<class T> bool ResetEditorField(T& c,ResetKind kind,std::string_view fie
     if(field=="hair"||field=="hair_type"){c.hair_model=c.hair_source=-1;return true;}
     if(field=="face"){c.face_source=-1;return true;}
     if(field=="face_mode"){c.face_mode=-1;return true;}
+    const auto component=FindFaceComponentType(field);
+    if(component!=face_component_types.end()){ResetFaceComponent(c,*component);return true;}
     const auto face=FindFaceField(field);
     if(face!=face_fields.end()){c.face[face-face_fields.begin()]=face_unset;return true;}
     if(field=="hair_height"||field=="hair_depth"||field=="hair_width"){

@@ -32,6 +32,7 @@
 extern "C" bool pes6_torrential_selected();
 extern "C" uint32_t pes6_weather_drop_count();
 extern "C" bool pes6_cloth_surface_palette(uint8_t*,uint32_t,uint32_t,float*);
+extern "C" bool pes6_cloth_sleeve_offsets(uint8_t*,uint32_t,uint32_t,float*);
 
 extern "C" bool pes6_weather_enabled(){
   return !pes6_editor_preview_depth&&
@@ -1001,3 +1002,4 @@ extern "C" void pes6_weather_net_hit(uint8_t* base,float x,float y,float z){
   if(net_shower_cooldown>0)return;
   wet_frame=true;EmitEvent(base,{EventKind::NetShower,p,{},0,net_base_drops});net_shower_cooldown=.65f;
 }
+

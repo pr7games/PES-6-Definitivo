@@ -2,19 +2,12 @@
 module.exports=function patchDistribution(text){let touched=false;
  text=text.replace(/DEFINE_REX_FUNC\(sub_([0-9A-F]+)\) \{[\s\S]*?\n\}/g,(fn,id)=>{
   if(id==='823F6E80'){
-   if(fn.includes('// PES6 native centre preparation v3'))return fn;
-   const anchor='loc_823F792C:\n';
-   if(!fn.includes(anchor))throw Error('Native centre preparation anchor changed');
-   fn=fn.replace(anchor,anchor+'\t// PES6 native centre preparation v3\n\tif(pes6_distribution_wait_cross(base,ctx.r29.u32))goto loc_823F7EF0;\n');
-   touched=true;return fn;
+   // Restore native running centres, including already-patched installations.
+   // Long-ball action8 charging below is independent and remains enabled.
+   return fn.replace(/\t\/\/ PES6 native centre preparation v3\r?\n\tif\(pes6_distribution_wait_cross\(base,ctx\.r29\.u32\)\)goto loc_823F7EF0;\r?\n/,'');
   }
   if(id==='823FC4A0'||id==='823EB1D8'){
-   if(!fn.includes('// PES6 native centre contact v3')){
-    const anchor='\tsub_825E1500(ctx, base);';
-    if(!fn.includes(anchor))throw Error('Native centre contact anchor changed '+id);
-    fn=fn.replace(anchor,'\t// PES6 native centre contact v3\n\tpes6_distribution_cross_launch(base,ctx);\n'+anchor);
-    touched=true;
-   }
+   fn=fn.replace(/\t\/\/ PES6 native centre contact v3\r?\n\tpes6_distribution_cross_launch\(base,ctx\);\r?\n/,'');
   }
   if(id==='823E2070'||id==='823E2168'){
    if(fn.includes('// PES6 native loft preparation v2'))return fn;

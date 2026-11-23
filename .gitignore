@@ -34,3 +34,6 @@
 # Notas locales de preparacion, fuera del contenido publicable.
 /PREPARACION.txt
 **/out/
+/test-updater.ps1
+source/native/replay-runtime/check.cpp
+/updates/test/LEEME.txt
