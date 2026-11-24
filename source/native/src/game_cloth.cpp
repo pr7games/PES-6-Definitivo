@@ -194,11 +194,11 @@ extern "C" void pes6_cloth_replay(uint8_t* base,uint32_t manager){
  if(!pes6_cloth_enabled()||!Valid(base,manager,40))return;const float next=F(base,manager+36);if(!std::isfinite(next))return;
  std::lock_guard lock(mutex);const float delta=next-cursor;
  const int direction=delta>0?1:delta<0?-1:0;
- // Reverse playback advances elapsed simulation time. Reset only on cuts
- // or direction changes, never on every negative replay frame.
- if(!replay||std::abs(delta)>4||(direction&&replay_direction&&direction!=replay_direction)){
-  generation++;replay=true;replay_direction=direction;
- }else{cloth_time+=std::abs(delta)/60.;if(direction)replay_direction=direction;}
+ // Rewinding is a sequence of animation samples, not forward physics time.
+ // Discard the prior sample's inertia/contact feedback on each backward step.
+ if(delta<0){generation++;replay=true;replay_direction=-1;}
+ else if(!replay||delta>4||(direction&&replay_direction&&direction!=replay_direction)){generation++;replay=true;replay_direction=direction;}
+ else{cloth_time+=delta/60.;if(direction)replay_direction=direction;}
  cursor=next;
 }
 extern "C" void pes6_cloth_forget(uint8_t*,uint32_t actor){if(!pes6_cloth_enabled())return;std::lock_guard lock(mutex);for(auto& t:tracks)if(t.actor==actor)t={};}
@@ -416,12 +416,13 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
  };
  const auto render_to_world=Combine(inverse_root_skin,root);
  std::array<Vec,36> targets;
- for(unsigned row=0;row<3;row++)for(unsigned col=0;col<12;col++){const unsigned i=row*12+col;targets[i]=Combine(shirt_bases[i],render_to_world).Point(t->shirt.rest[i]);}
- if(dt>0&&t->shirt.ready)for(unsigned i=12;i<36;i++){if(!t->shirt.Pinned(i)){t->shirt.position[i]=t->shirt.position[i]+t->pending_contact[i];t->shirt.previous[i]=t->shirt.previous[i]+t->pending_contact[i];}t->pending_contact[i]={};}
+ for(unsigned row=0;row<3;row++)for(unsigned col=0;col<12;col++){const unsigned i=row*12+col;targets[i]=render_to_world.Point(shirt_bases[i].Point(t->shirt.rest[i]));}
+ if(dt>0&&t->leg_quiet<.15f&&t->shirt.ready)for(unsigned i=12;i<36;i++){if(!t->shirt.Pinned(i)){t->shirt.position[i]=t->shirt.position[i]+t->pending_contact[i];t->shirt.previous[i]=t->shirt.previous[i]+t->pending_contact[i];}t->pending_contact[i]={};}
  // Cuts have no elapsed motion: skip the synthetic gravity/contact step
  // that Grid::Step applies to a new seed. Settled cloth uses the retained
  // pose and precise visible-mesh contact instead of inflating the coarse cage.
- const bool settled=t->leg_motion==0&&t->idle_hem_ready;
+ const bool settled=t->leg_quiet>=.15f;
+ if(settled&&!t->idle_hem_ready){t->pending_contact={};t->hem_motion={};t->hem_motion_ready=false;t->torso_lag.ready=false;t->idle_hem_ready=true;}
  if(dt==0||settled)t->shirt.Reset(targets);
  else t->shirt.Step(targets,dt,body_project);
  if(legs_valid){
@@ -477,7 +478,7 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
   std::array<Frame,6> before_final_contact;for(unsigned i=0;i<6;i++)before_final_contact[i]=skin[28+i];
   const auto final_contact=ResolveClothProfileCoherent(t->collision_profile,skin,coherent_steps);
   t->contact.corrected+=final_contact.corrected;t->contact.maxCorrection=std::max(t->contact.maxCorrection,final_contact.maxCorrection);
-  if(dt>0){
+  if(dt>0&&!settled){
    constexpr unsigned sorted[2][6]={{36,37,38,41,40,39},{28,29,30,33,32,31}};
    for(unsigned row=2;row<3;row++)for(unsigned col=0;col<12;col++){
     Vec delta{};if(col%2){const unsigned b=sorted[row-1][col/2];const auto rest=t->shirt.rest[row*12+col];delta=contact_only[b-28].Point(rest)-before_contact[b-28].Point(rest)+skin[b].Point(rest)-before_final_contact[b-28].Point(rest);}
@@ -485,15 +486,7 @@ extern "C" void pes6_cloth_pose(uint8_t* base,uint32_t actor,uint32_t count){
     t->pending_contact[row*12+col]=Limit(render_to_world.Linear(delta)*.35f,.012f);
    }
   }
-  // Keep a root-relative settled pose, not a frozen world-space jersey.
-  // Locomotion/kicks release it immediately. Final collision still has priority.
-  if(t->leg_quiet>=.15f){
-   if(!t->idle_hem_ready){for(unsigned i=0;i<6;i++)t->idle_hem[i]=Combine(skin[28+i],inverse_root_skin);t->idle_hem_ready=true;}
-   for(unsigned i=0;i<6;i++){const auto held=Combine(t->idle_hem[i],root_skin);skin[28+i]=MixSkin(skin[28+i],held,1.f-t->leg_motion,cloth_bind[28+i].p);}
-   const auto safety=ResolveClothProfileCoherent(t->collision_profile,skin,3);
-   t->contact.corrected+=safety.corrected;t->contact.maxCorrection=std::max(t->contact.maxCorrection,safety.maxCorrection);
-   if(t->leg_motion==0){t->pending_contact={};t->shirt.ready=false;t->torso_lag.ready=false;}
-  }
+  if(settled){t->pending_contact={};t->torso_lag.ready=false;}
   for(unsigned b=28;b<34;b++)Write(base,matrices+b*64,Combine(cloth_bind[b],skin[b]));
   // Restore the approved native front and protected back controls.
   // Protected rear/printing controls retain their native pose.
@@ -575,4 +568,8 @@ extern "C" bool pes6_cloth_sleeve_offsets(uint8_t* base,uint32_t instance,uint32
  if(!pes6_cloth_enabled())return false;const auto input=REX_LOAD_U32(instance+240);std::lock_guard lock(mutex);auto* t=PoseTrack(matrices,input,instance);if(!t)return false;
  if(t->matrices!=matrices)ClothView(*t,base,instance,matrices);for(unsigned i=0;i<2;i++){const auto d=t->matrices==matrices?t->sleeve_delta[i]:t->view_transform.Linear(t->sleeve_delta[i]);output[i*3]=d.x;output[i*3+1]=d.y;output[i*3+2]=d.z;}return true;
 }
+
+
+
+
 
