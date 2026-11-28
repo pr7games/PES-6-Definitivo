@@ -18,9 +18,15 @@ foreach($api in @('Vulkan','D3D12')){
 }
 foreach($name in @('pes6.exe','rexruntime.dll','rexgpu-xenos.dll','amd_fidelityfx_dx12.dll','pes6-native-extension.dll')){[void]$selected.Add('bin/native-renderer/'+$name)}
 $fileInventory=@()
+$previous=$null
+if($PreviousInventory){$previous=Get-Content -LiteralPath $PreviousInventory -Raw | ConvertFrom-Json}
+$previousLayout=$previous.files | Where-Object path -eq '.project-layout.json' | Select-Object -First 1
 foreach($relative in ($selected | Sort-Object)){
  if($relative -match '(^|/)(save|backups?|tests?|analysis|cache|logs|exports?|trace|defaults)(/|$)|\.before|\.bak$|\.pdb$|trace\.enabled$|(^|/)editor-src/|^bin/editor/|PES 6 Editor\.exe'){throw "Recurso de desarrollo seleccionado: $relative"}
  $source=Join-Path $ProjectRoot $relative
+ # Preserve the installed layout marker if it already belongs to this base.
+ if($relative -eq '.project-layout.json' -and $previousLayout -and
+    (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -eq $previousLayout.sha256){continue}
  if($relative -in @('PES 6.exe','PES 6 Launcher.exe','bin/PES 6.exe','bin/PES 6 Launcher.exe')){$source=Join-Path $repoRoot ('dist/launcher-'+$Version+'/PES 6 Launcher.exe')}
  $item=Get-Item -LiteralPath $source -Force
  if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw "Enlace no permitido: $relative"}
@@ -32,8 +38,7 @@ foreach($relative in ($selected | Sort-Object)){
 Copy-Item -LiteralPath (Join-Path $releaseRoot 'game-patches') -Destination $payload -Recurse
 $utf8=New-Object Text.UTF8Encoding($false)
 $remove=@()
-if($PreviousInventory){
- $previous=Get-Content -LiteralPath $PreviousInventory -Raw | ConvertFrom-Json
+if($previous){
  $remove=@($previous.files | Where-Object {-not $selected.Contains($_.path)} | ForEach-Object {$_.path})
 }
 $inventory=@{version=$Version;files=$fileInventory;remove=$remove}
