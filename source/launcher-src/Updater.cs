@@ -70,6 +70,8 @@ namespace FIFA08Launcher {
    if(new[]{"bin/native/build/","bin/native-renderer/","bin/launcher-assets/","bin/neural-rendering/","bin/scripts/","data/audio/","data/balls/","data/cloth/","data/graphics/","data/loading-logo/","data/menu-carousel/","data/patches/","data/stadiums/"}.Any(p=>r.StartsWith(p,StringComparison.Ordinal)))return !r.EndsWith(".log")&&!r.Contains("/tests/")&&!r.Contains("/cache/");
    if(r=="bin/repair/dll-inventory.json"||System.Text.RegularExpressions.Regex.IsMatch(r,@"^bin/repair/pes6-dlls-[0-9]+(.[0-9]+){1,3}.zip$"))return true;
    if(r=="data/camera-wide.txt")return true;
+   if(r=="data/selector/catalog.txt"||System.Text.RegularExpressions.Regex.IsMatch(r,@"^data/(credits/0[1-5]|selector/groups/[a-z0-9_-]+)\.we$"))return true;
+   if(System.Text.RegularExpressions.Regex.IsMatch(r,@"^data/leagues/bundesliga-2006/(enabled|catalog\.json|names\.txt|(?:players|teams|crests-271[01](?:-native)?)\.bin|selector-[a-z0-9_-]+\.we|previews/\d+\.bin)$"))return true;
    if(r.StartsWith("data/editor/",StringComparison.Ordinal))return !r.Contains("/defaults/")&&!r.Contains("/backups/")&&!r.Contains("/trace/")&&!r.Contains("/tests/")&&!r.EndsWith(".log")&&!r.EndsWith("trace.enabled");
    return false;
   }
