@@ -4,9 +4,9 @@
     "version":  "0.3.2",
     "packages":  [
                      {
-                         "url":  "https://github.com/pr7games/PES-6-Definitivo/releases/download/v0.3.2/PES6-Launcher-0.3.2.zip",
-                         "name":  "PES6-Launcher-0.3.2.zip",
-                         "sha256":  "fb0397ad1c73da75ed988f26ed4f888944db8b9f994685e5e2ae423188608a37",
+                         "url":  "https://github.com/pr7games/PES-6-Definitivo/releases/download/v0.3.2/PES6-Launcher-0.3.2-r2.zip",
+                         "name":  "PES6-Launcher-0.3.2-r2.zip",
+                         "sha256":  "ef9fbe038ceb45eec94b8c6e7b6dbf0cac2ff87cd70195b25f94f836d17aabdf",
                          "size":  791374
                      }
                  ]
