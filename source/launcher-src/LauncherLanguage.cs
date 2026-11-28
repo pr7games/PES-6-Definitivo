@@ -5,9 +5,35 @@ using System.Linq;
 using System.Windows.Forms;
 namespace FIFA08Launcher {
  public partial class LauncherForm {
-  Button uiLanguage;readonly Dictionary<Control,string> uiSources=new Dictionary<Control,string>();readonly Dictionary<ComboBox,string[]> choiceSources=new Dictionary<ComboBox,string[]>();string statusSource;
-  void InitializeLanguage(){uiLanguage=PortUi.Toggle(()=>SetUiEnglish(!PortUi.English,true));panelControls.Controls.Add(uiLanguage);SetUiEnglish(PortUi.English,false);UpdateResponsiveLayout();}
-  public void SetUiEnglish(bool english,bool persist){PortUi.English=english;PortUi.Apply(this,uiSources,btnPlay,lblStatus,uiLanguage);foreach(var box in new[]{cbDisplayMode,cbAntiAliasing,cbResolution}){string[] source;if(!choiceSources.TryGetValue(box,out source)){source=box.Items.Cast<object>().Select(Convert.ToString).ToArray();choiceSources[box]=source;}int index=box.SelectedIndex;box.BeginUpdate();box.Items.Clear();box.Items.AddRange(source.Select(PortUi.T).Cast<object>().ToArray());box.SelectedIndex=index;box.EndUpdate();}var speech=cbCommentaryLanguage.SelectedItem as Fifa08Languages.Language;if(speech!=null&&speech.Code=="original"){speech.Name=PortUi.T("No se detectaron comentarios");cbCommentaryLanguage.Refresh();}btnPlay.Text=PortUi.T(runningGameProcess==null?"JUGAR":"EN JUEGO");if(statusSource==null)statusSource=lblStatus.Text;lblStatus.Text=PortUi.T(statusSource);uiLanguage.Text=english?"EN | ES":"ES | EN";RefreshFeatureLanguage();if(modernReady&&embeddedAchievements!=null)embeddedAchievements.SetPresentationLanguage(english);if(modernReady)RefreshAbout();if(persist)PortUi.Save();}
+  const int LanguageSelectorWidth=126;
+  Panel uiLanguage;
+  readonly Dictionary<string,Button> languageButtons=new Dictionary<string,Button>();readonly Dictionary<Control,string> uiSources=new Dictionary<Control,string>();readonly Dictionary<ComboBox,string[]> choiceSources=new Dictionary<ComboBox,string[]>();string statusSource;
+  void InitializeLanguage(){
+   uiLanguage=new Panel{Width=LanguageSelectorWidth,Height=24};
+   AddLanguageButton("es","ES","Espa\u00f1ol",0);
+   AddLanguageButton("en","ENG","English",42);
+   AddLanguageButton("pt","PT","Portugu\u00eas",84);
+   panelControls.Controls.Add(uiLanguage);
+   SetUiLanguage(PortUi.Language,false);
+   UpdateResponsiveLayout();
+  }
+  void AddLanguageButton(string code,string label,string name,int left){
+   var button=PortUi.Toggle(()=>SetUiLanguage(code,true));
+   button.Text=label;
+   button.AccessibleName=name;
+   button.SetBounds(left,0,40,24);
+   languageButtons.Add(code,button);
+   uiLanguage.Controls.Add(button);
+  }
+  void RefreshLanguageButtons(){
+   foreach(var entry in languageButtons){
+    bool active=entry.Key==PortUi.Language;
+    entry.Value.BackColor=active?PortUi.Accent:System.Drawing.Color.FromArgb(22,22,25);
+    entry.Value.ForeColor=active?System.Drawing.Color.Black:System.Drawing.Color.Gainsboro;
+   }
+  }
+  public void SetUiEnglish(bool english,bool persist){SetUiLanguage(english?"en":"es",persist);}
+  void SetUiLanguage(string language,bool persist){PortUi.Language=language;bool english=PortUi.English;PortUi.Apply(this,uiSources,btnPlay,lblStatus,uiLanguage);foreach(var box in new[]{cbDisplayMode,cbAntiAliasing,cbResolution,gameplayProfile}){if(box==null)continue;string[] source;if(!choiceSources.TryGetValue(box,out source)){source=box.Items.Cast<object>().Select(Convert.ToString).ToArray();choiceSources[box]=source;}int index=box.SelectedIndex;box.BeginUpdate();box.Items.Clear();box.Items.AddRange(source.Select(PortUi.T).Cast<object>().ToArray());box.SelectedIndex=index;box.EndUpdate();}var speech=cbCommentaryLanguage.SelectedItem as Fifa08Languages.Language;if(speech!=null&&speech.Code=="original"){speech.Name=PortUi.T("No se detectaron comentarios");cbCommentaryLanguage.Refresh();}btnPlay.Text=PortUi.T(runningGameProcess==null?"JUGAR":"EN JUEGO");if(statusSource==null)statusSource=lblStatus.Text;lblStatus.Text=PortUi.T(statusSource);RefreshLanguageButtons();RefreshFeatureLanguage();if(modernReady&&embeddedAchievements!=null)embeddedAchievements.SetPresentationLanguage(english);if(modernReady)RefreshAbout();if(persist)PortUi.Save();}
   void SetLauncherStatus(string text){statusSource=text;lblStatus.Text=PortUi.T(text);}
   string GameDataRoot(){
    string direct=Path.Combine(rootDir,"game");

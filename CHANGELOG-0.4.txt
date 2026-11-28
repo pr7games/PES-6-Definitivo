@@ -1,0 +1,10 @@
+PES 6 Definitivo 0.4
+
+- Bundesliga 2006/07, plantillas de Boca y River basadas en FIFA 07 y mejoras en el selector de equipos.
+- Base actualizada con las últimas ediciones de jugadores, plantillas y equipaciones, y mejoras en el editor interno.
+- Camisetas realistas y repeticiones optimizadas. Redes de PES 2009 con reacción a impactos y movimiento en cinemáticas.
+- Perfiles Por defecto y Precisión, ajustes de animaciones especiales y bicicleta continua al mantener LB.
+- Alt+Enter en Nativo, ajustes de estadios y correcciones visuales en cinemáticas.
+- Vulkan y D3D12 se compilan para Ivy Bridge (AVX). El arranque en un i7-3770 queda pendiente de confirmación.
+
+Los archivos ZIP son partes de una sola actualización y requieren una instalación compatible. Las partidas y preferencias se conservan. La actualización desde el launcher se habilitará por separado.

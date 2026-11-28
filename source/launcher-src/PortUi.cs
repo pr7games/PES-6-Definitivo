@@ -5,13 +5,15 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 public static class PortUi {
- public static readonly Color Accent=Color.FromArgb(245,196,0);
- public static readonly Color AccentDark=Color.FromArgb(18,18,20);
- public static bool English=Read();
+ public static readonly Color Accent=Color.FromArgb(255,204,0);
+ public static readonly Color AccentDark=Color.FromArgb(28,25,12);
+ public static string Language=Read();
+ public static bool English {get{return Language=="en";}set{Language=value?"en":"es";}}
  static string Preference {get{return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"PR7","PES6Port","ui-language.txt");}}
- static bool Read(){try{return File.ReadAllText(Preference).Trim()=="en";}catch(IOException){return false;}catch(UnauthorizedAccessException){return false;}}
- public static void Save(){Directory.CreateDirectory(Path.GetDirectoryName(Preference));File.WriteAllText(Preference,English?"en":"es");}
+ static string Read(){try{var value=File.ReadAllText(Preference).Trim();return value=="en"||value=="pt"?value:"es";}catch(IOException){return "es";}catch(UnauthorizedAccessException){return "es";}}
+ public static void Save(){Directory.CreateDirectory(Path.GetDirectoryName(Preference));File.WriteAllText(Preference,Language);}
  static readonly Dictionary<string,string> words=new Dictionary<string,string>{
+{"Mejoras","Enhancements"},{"Por defecto","Default"},{"Precisi\u00f3n","Precision"},{"Gameplay por defecto","Default gameplay"},{"Mejorado","Improved"},{"Realista","Realistic"},
 {"P\u00fablico suavizado","Softened crowd"},{"Pantalla","Display"},{"Lluvia mejorada","Improved rain"},{"Partículas mejoradas","Improved particles"},{"Suciedad de los jugadores","Player dirt"},{"Camisetas realistas","Realistic kits"},{"Efectos Mejorados","Enhanced Effects"},{"Guardar controles","Save controls"},{"Avisos de logros","Achievement notifications"},{"Sonido","Sound"},
 {"Selecciona un campo y pulsa la tecla deseada","Select a field and press the desired key"},{"Restaurar teclas","Reset key bindings"},
 {"Stick izquierdo - arriba","Left stick - up"},{"Stick izquierdo - abajo","Left stick - down"},{"Stick izquierdo - izquierda","Left stick - left"},{"Stick izquierdo - derecha","Left stick - right"},{"Stick derecho - arriba","Right stick - up"},{"Stick derecho - abajo","Right stick - down"},{"Stick derecho - izquierda","Right stick - left"},{"Stick derecho - derecha","Right stick - right"},{"Gatillo izquierdo (LT / L2)","Left trigger (LT / L2)"},{"Gatillo derecho (RT / R2)","Right trigger (RT / R2)"},{"Boton superior izquierdo (LB / L1)","Left shoulder (LB / L1)"},{"Boton superior derecho (RB / R1)","Right shoulder (RB / R1)"},{"Pulsar stick izquierdo (L3)","Left stick press (L3)"},{"Pulsar stick derecho (R3)","Right stick press (R3)"},{"Cruceta - arriba","D-pad - up"},{"Cruceta - abajo","D-pad - down"},{"Cruceta - izquierda","D-pad - left"},{"Cruceta - derecha","D-pad - right"},{"A / Cruz","A / Cross"},{"B / Circulo","B / Circle"},{"X / Cuadrado","X / Square"},{"Y / Triangulo","Y / Triangle"},
@@ -42,7 +44,95 @@ public static class PortUi {
  {"No se encontr\u00f3 el ejecutable principal 'default.xex' en el juego seleccionado.","The selected game does not contain default.xex."},{"Esta copia no coincide con la version de PES 6 compatible con este port.","This copy does not match the PES 6 executable supported by this port."},
  {"Falta el manifiesto del port","The port manifest is missing"},{"Falta locale.ini","locale.ini is missing"},{"Configuracion de idiomas inesperada","Unexpected language configuration"},{"Esta copia no contiene los textos: ","This copy does not include this text language: "},{"Esta copia no contiene los comentarios: ","This copy does not include this commentary language: "}
  };
- public static string T(string text){if(!English||String.IsNullOrEmpty(text))return text;string value;if(words.TryGetValue(text,out value))return value;foreach(var pair in words.OrderByDescending(p=>p.Key.Length))if(text.StartsWith(pair.Key,StringComparison.Ordinal))return pair.Value+text.Substring(pair.Key.Length);return text;}
+ static readonly Dictionary<string,string> portuguese=new Dictionary<string,string>{
+{"Downloading update","Baixando atualização"},
+{"Verifying files","Verificando arquivos"},
+{"Installing update","Instalando atualização"},
+{"Finishing","Finalizando"},
+{"Update complete","Atualização concluída"},
+{"Updating...","Atualizando..."},
+{" (visual preview)"," (prévia visual)"},
+{"\nVisual preview","\nPrévia visual"},
+{"Visual preview - Same version ","Prévia visual - Mesma versão "},
+{"\nVisual simulation: no files are downloaded or replaced.","\nSimulação visual. Nenhum arquivo é baixado ou substituído."},
+{"Close the game and editor before updating.","Feche o jogo e o editor antes de atualizar."},
+{"Download the updated launcher from GitHub.","Baixe o launcher atualizado no GitHub."},
+{"FSR active: FXAA is bypassed to preserve detail.","FSR ativo. O FXAA fica desativado para preservar os detalhes."},
+{"F10 during the match to return to Windows","F10 durante a partida para voltar ao Windows"},
+{"Could not save settings","Não foi possível salvar as configurações"},
+{"The launch script is missing","O script de inicialização está ausente"},
+{"PES 6 is running","PES 6 em execução"},
+{"Cancel","Cancelar"},
+{"Close","Fechar"},
+{"Exit","Sair"},
+{"Display","Tela"},
+{"Enhancements","Melhorias"},{"Graphics","Gr?ficos"},
+{"Controls","Controles"},
+{"Languages","Idiomas"},
+{"Achievements","Conquistas"},
+{"About","Sobre"},
+{"Resolution","Resolu??o"},
+{"Native","Nativo"},
+{"Performance","Desempenho"},
+{"Balanced","Equilibrado"},
+{"Quality","Qualidade"},
+{"Windowed","Modo janela"},
+{"Fullscreen","Tela cheia"},
+{"Texture filtering","Filtragem de texturas"},
+{"Image filter","Filtro de imagem"},
+{"Show FPS","Mostrar FPS"},
+{"Enable keyboard / mouse","Ativar teclado / mouse"},
+{"Button prompts","?cones dos bot?es"},
+{"Game text language","Idioma dos textos do jogo"},
+{"Commentary language","Idioma da narra??o"},
+{"Commentary","Narra??o"},
+{"No commentary detected","Nenhuma narra??o detectada"},
+{"No game languages detected","Nenhum idioma do jogo detectado"},
+{"PLAY","JOGAR"},
+{"RUNNING","EM JOGO"},
+{"F10 during a match to return to Windows","F10 durante a partida para voltar ao Windows"},
+{"Default gameplay","Jogabilidade padr?o"},{"Default","Padr\u00e3o"},{"Precision","Precis\u00e3o"},
+{"Improved","Melhorada"},
+{"Realistic","Realista"},
+{"Disabled","Desativado"},
+{"Improved rain","Chuva melhorada"},
+{"Improved particles","Part?culas melhoradas"},
+{"Player dirt","Sujeira nos jogadores"},
+{"Realistic kits","Uniformes realistas"},
+{"Enhanced Effects","Efeitos aprimorados"},
+{"Softened crowd","Torcida suavizada"},
+{"Save controls","Salvar controles"},
+{"Reset key bindings","Restaurar teclas"},
+{"Achievement notifications","Notifica??es de conquistas"},
+{"Sound","Som"},
+{"Select a field and press the desired key","Selecione um campo e pressione a tecla desejada"},
+{"Project GitHub","GitHub do projeto"},
+{"Check for updates","Buscar atualiza??es"},
+{"Checking for updates...","Buscando atualiza??es..."},
+{"Update available","Atualiza??o dispon?vel"},
+{"Update available - v","Atualiza??o dispon?vel - v"},
+{"Update to ","Atualizar para "},
+{"New version available: ","Nova vers?o dispon?vel: "},
+{"You have the latest version.","Voc? tem a vers?o mais recente."},
+{"Connection failed. Press to retry.","Falha na conex?o. Clique para tentar novamente."},
+{"Downloading update: ","Baixando atualiza??o: "},
+{"Verifying and preparing installation...","Verificando e preparando a instala??o..."},
+{"Check installation","Verificar instala??o"},
+{"Checking installation...","Verificando instala??o..."},
+{"All port DLLs match this version.","Todas as DLLs do port correspondem a esta vers?o."},
+{"DLLs restored: ","DLLs restauradas: "},
+{"Installation check could not be completed. ","N?o foi poss?vel concluir a verifica??o. "},
+{"Could not start PES 6. See launcher.log for details.","N?o foi poss?vel iniciar o PES 6. Consulte launcher.log."},
+{"No se detectaron comentarios","Nenhuma narra??o detectada"},
+{"FXAA (Recommended - Soft)","FXAA (recomendado - suave)"},
+{"FXAA Extreme","FXAA extremo"},
+{"Left stick","Anal?gico esquerdo"},
+{"Right stick","Anal?gico direito"},
+{"D-pad","Direcional"}
+ };
+ public static string PT(string text,string fallback){if(String.IsNullOrEmpty(text))return fallback;string value;if(portuguese.TryGetValue(text,out value))return value;foreach(var pair in portuguese.OrderByDescending(p=>p.Key.Length))if(text.StartsWith(pair.Key,StringComparison.Ordinal))return pair.Value+text.Substring(pair.Key.Length);return fallback;}
+ public static string T(string text){return Language=="pt"?PT(TranslateEnglish(text,true),PT(text,text)):TranslateEnglish(text,English);}
+ static string TranslateEnglish(string text,bool english){if(!english||String.IsNullOrEmpty(text))return text;string value;if(words.TryGetValue(text,out value))return value;foreach(var pair in words.OrderByDescending(p=>p.Key.Length))if(text.StartsWith(pair.Key,StringComparison.Ordinal))return pair.Value+text.Substring(pair.Key.Length);return text;}
  public static void Apply(Control root,Dictionary<Control,string> sources,params Control[] excluded){if(!excluded.Contains(root)&&(root is Button||root is Label||root is CheckBox)){string source;if(!sources.TryGetValue(root,out source)){source=root.Text;sources[root]=source;}root.Text=T(source);var label=root as Label;if(label!=null)label.UseMnemonic=false;var button=root as Button;if(button!=null)button.UseMnemonic=false;}foreach(Control child in root.Controls)Apply(child,sources,excluded);}
  public static Button Toggle(Action click){var b=new Button{Width=70,Height=25,Font=new Font("Segoe UI",8,FontStyle.Bold),ForeColor=Color.FromArgb(220,220,225),BackColor=Color.FromArgb(22,22,25),FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand,UseVisualStyleBackColor=false};b.FlatAppearance.BorderColor=Color.FromArgb(46,46,52);b.Click+=(s,e)=>click();return b;}
 }

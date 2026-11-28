@@ -23,14 +23,22 @@ function Get-Pes6RuntimeFiles([string]$Root) {
     foreach($m in [regex]::Matches([IO.File]::ReadAllText((Join-Path $Root 'source\native\src\cloth_variant_map.h')),'"([^"]+\.bin)"')){
         Add-File ('data\cloth\models\'+$m.Groups[1].Value)
     }
+    foreach($entry in 2753..2816){
+        Add-File "data\cloth\models\crest-stock-$entry.bin"
+        Add-File "data\cloth\models\crest-reactive-$entry.bin"
+    }
     Add-Matching 'data\graphics\soft-crowd' '(?:\.we$|^sources\.txt$)'
     Add-Matching 'data\loading-logo\packages' '\.(?:bin|txt)$'
     Add-Matching 'data\loading-logo' '^\d{2}\.we$'
     Add-Matching 'data\menu-carousel' '^(?:0[1-9]|10)\.we$'
+    Add-Matching 'data\credits' '^0[1-5]\.we$'
+    Add-File 'data\selector\catalog.txt'
+    Add-Matching 'data\selector\groups' '^[^/]+\.we$'
     foreach($name in @('asset-runtime.txt','openplay-frequency.txt','openplay-shot-trial.txt','player-appearance.txt','stadiums.txt','team-info.txt','team-management.txt')){
         $relative='data\editor\'+$name
         if(Test-Path -LiteralPath (Join-Path $Root $relative)){Add-File $relative}
     }
+    Add-Matching 'data\leagues\bundesliga-2006' '^(?:enabled|catalog\.json|names\.txt|players\.bin|teams\.bin|crests-271[01](?:-native)?\.bin|selector-[^/]+\.we|previews/.*\.bin)$'
     Add-Matching 'data\editor\assets' '\.bin$'
     Add-Matching 'data\editor\boots' '(?:\.(?:we|rgba)$|^packages/[^/]+\.bin$|^(?:names|hidden-in-game)\.txt$)'
     Add-Matching 'data\editor\boot-previews' '\.(?:we|rgba)$'
@@ -38,6 +46,7 @@ function Get-Pes6RuntimeFiles([string]$Root) {
     Add-Matching 'data\editor\motion-recipes' '\.(?:p6motion|motion|bundle|bin|txt)$'
     Add-Matching 'data\editor\kits\packages' '\.bin$'
     Add-Matching 'data\editor\kit-previews' '\.(?:bin|txt)$'
+    Add-Matching 'data\editor\callnames' '\.(?:bin|tsv)$'
     Add-Matching 'data\editor\competitions' '^(?:(?:logos|names|textures)\.txt|packages/[^/]+\.bin|textures/[^/]+\.we|presentation/.*\.(?:bin|we|txt))$'
     Add-Matching 'data\patches\fonts' '\.bin$'
     Add-Matching 'data\patches\kits\fonts' '\.bin$'
@@ -49,6 +58,7 @@ function Get-Pes6RuntimeFiles([string]$Root) {
     }
     Add-Matching 'data\stadiums\global-adboards' '^sources\.txt$'
     Add-Matching 'data\stadiums\native-lighting' '^lighting-\d+\.bundle$'
+    Add-Matching 'data\stadiums\pes2009-nets' '^(?:nets\.bundle|original-(?:rdata|data)\.bin|(?:positions|indices|draw-map|physics)-[01]\.bin)$'
     Add-Matching 'data\stadiums\pes2009-pitches' '^stadium-[0-7]/variant-(?:[0-5]|dusk-wet)(?:-winter)?\.bundle$'
     Add-Matching 'data\stadiums\sunset' '^(?:lighting-\d+|stadium-[0-7]-sky(?:-winter)?)\.bundle$'
     foreach($relative in @('data\stadiums\lighting-gain-percent.txt','data\stadiums\konami\preferred-hour.txt','data\camera-wide.txt')){

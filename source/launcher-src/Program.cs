@@ -108,7 +108,7 @@ namespace FIFA08Launcher
         public RoundedButton()
         {
             this.SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            this.CornerRadius = 8;
+            this.CornerRadius = 12;
             this.Cursor = Cursors.Hand;
             this.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
             this.ForeColor = PortUi.AccentDark;
@@ -134,8 +134,8 @@ namespace FIFA08Launcher
             }
 
             Color bg = !this.Enabled ? Color.FromArgb(70, 70, 75) :
-                       isPressed ? Color.FromArgb(195, 152, 0) :
-                       isHovered ? Color.FromArgb(255, 214, 30) : PortUi.Accent;
+                       isPressed ? Color.FromArgb(229, 180, 0) :
+                       isHovered ? Color.FromArgb(255, 218, 51) : PortUi.Accent;
 
             Rectangle rect = new Rectangle(0, 0, this.Width - 1, this.Height - 1);
             using (GraphicsPath path = UIHelper.GetRoundedPath(rect, CornerRadius))
@@ -146,7 +146,7 @@ namespace FIFA08Launcher
                 }
                 if (this.Enabled && !isPressed)
                 {
-                    using (Pen p = new Pen(Color.FromArgb(255, 228, 95), 1.2f))
+                    using (Pen p = new Pen(Color.FromArgb(255, 226, 119), 1.2f))
                     {
                         g.DrawPath(p, path);
                     }
@@ -165,7 +165,7 @@ namespace FIFA08Launcher
         public RoundedBadgeLabel()
         {
             this.SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            this.CornerRadius = 6;
+            this.CornerRadius = 10;
             this.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
             this.ForeColor = Color.FromArgb(215, 215, 220);
             this.BackColor = Color.FromArgb(22, 22, 24);
@@ -429,7 +429,7 @@ namespace FIFA08Launcher
                     if (GetClientRect(Handle, out client))
                     {
                         using (Graphics g = Graphics.FromHdc(m.WParam))
-                        using (SolidBrush background = new SolidBrush(Color.FromArgb(22, 22, 25)))
+                        using (SolidBrush background = new SolidBrush(Color.FromArgb(40, 41, 46)))
                             g.FillRectangle(background, client.Left, client.Top,
                                 client.Right - client.Left, client.Bottom - client.Top);
                         m.Result = new IntPtr(1);
@@ -495,7 +495,7 @@ namespace FIFA08Launcher
             FlatStyle = FlatStyle.Flat;
             Cursor = Cursors.Hand;
             Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-            BackColor = Color.FromArgb(22, 22, 25);
+            BackColor = Color.FromArgb(40, 41, 46);
             ForeColor = Color.White;
             CornerRadius = 6;
             ItemHeight = 26;
@@ -509,7 +509,7 @@ namespace FIFA08Launcher
             // CB_SETITEMHEIGHT(-1) sizes the closed selection separately from
             // the 26 px popup rows, preserving the compact launcher layout.
             if (IsHandleCreated)
-                SendMessage(Handle, 0x0153, new IntPtr(-1), new IntPtr(Font.Height + 4));
+                SendMessage(Handle, 0x0153, new IntPtr(-1), new IntPtr(Font.Height + 12));
         }
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -576,7 +576,7 @@ namespace FIFA08Launcher
             }
             if (m.Msg == 0x0134) // WM_CTLCOLORLISTBOX: native popup's background.
             {
-                int background = ColorTranslator.ToWin32(Color.FromArgb(22, 22, 25));
+                int background = ColorTranslator.ToWin32(Color.FromArgb(40, 41, 46));
                 SetBkColor(m.WParam, background);
                 SetTextColor(m.WParam, ColorTranslator.ToWin32(ForeColor));
                 if (popupBackgroundBrush == IntPtr.Zero)
@@ -637,7 +637,7 @@ namespace FIFA08Launcher
             using (GraphicsPath path = UIHelper.GetRoundedPath(rect, CornerRadius))
             {
                 Color boxBg = !Enabled ? Color.FromArgb(17,17,19) : PopupOpen ? Color.FromArgb(28, 28, 32) :
-                              isHovered ? Color.FromArgb(26, 26, 30) : Color.FromArgb(22, 22, 25);
+                              isHovered ? Color.FromArgb(26, 26, 30) : Color.FromArgb(40, 41, 46);
                 using (SolidBrush b = new SolidBrush(boxBg))
                 {
                     g.FillPath(b, path);
@@ -711,37 +711,13 @@ namespace FIFA08Launcher
 
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            int boxSize = 17;
-            int boxY = (this.Height - boxSize) / 2;
-            Rectangle boxRect = new Rectangle(0, boxY, boxSize, boxSize);
-
-            using (GraphicsPath path = UIHelper.GetRoundedPath(boxRect, 4))
-            {
-                using (SolidBrush b = new SolidBrush(this.Checked ? RedColor : BoxBg))
-                {
-                    g.FillPath(b, path);
-                }
-                using (Pen p = new Pen(this.Checked ? RedColor : BorderColor, 1.4f))
-                {
-                    g.DrawPath(p, path);
-                }
+            int boxSize = 34;
+            int boxY = (Height-20)/2;
+            using(var track=UIHelper.GetRoundedPath(new Rectangle(0,boxY,34,20),10)){
+                using(var fill=new SolidBrush(Checked?PortUi.Accent:Color.FromArgb(75,77,84)))g.FillPath(fill,track);
             }
-
-            if (this.Checked)
-            {
-                using (Pen checkPen = new Pen(PortUi.AccentDark, 2.2f))
-                {
-                    checkPen.StartCap = LineCap.Round;
-                    checkPen.EndCap = LineCap.Round;
-                    g.DrawLines(checkPen, new Point[] {
-                        new Point(boxRect.Left + 3, boxRect.Top + 8),
-                        new Point(boxRect.Left + 7, boxRect.Top + 12),
-                        new Point(boxRect.Left + 13, boxRect.Top + 4)
-                    });
-                }
-            }
-
-            Rectangle textRect = new Rectangle(boxSize + 8, 0, this.Width - (boxSize + 8), this.Height);
+            using(var knob=new SolidBrush(Enabled?Color.White:Color.Silver))g.FillEllipse(knob,Checked?16:3,boxY+3,14,14);
+            Rectangle textRect = new Rectangle(boxSize+12,0,Math.Max(1,Width-boxSize-12),Height);
             TextRenderer.DrawText(g, this.Text, this.Font, textRect, this.ForeColor,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
@@ -838,7 +814,7 @@ namespace FIFA08Launcher
         private Timer gameMonitorTimer;
         private Process runningGameProcess;
 
-        private readonly string settingsFile;
+        private string settingsFile;
         private readonly string rootDir;
         private string detectedGpuName = "Adaptador Direct3D 12";
         private int detectedGpuIndex = -1;
@@ -850,8 +826,7 @@ namespace FIFA08Launcher
             rootDir = Path.GetDirectoryName(typeof(LauncherForm).Assembly.Location);
             if (string.IsNullOrEmpty(rootDir)) rootDir = AppDomain.CurrentDomain.BaseDirectory;
             if(File.Exists(Path.Combine(rootDir,"bin","probar-pes6.ps1")))rootDir=Path.Combine(rootDir,"bin");
-            Directory.CreateDirectory(Path.Combine(Directory.GetParent(rootDir).FullName,"data","config"));
-            settingsFile = Path.Combine(Directory.GetParent(rootDir).FullName,"data","config","launcher-settings.json");
+            settingsFile = ResolveConfigFile("launcher-settings.json");
 
             DetectGpu();
             InitializeComponent();
@@ -1142,8 +1117,8 @@ namespace FIFA08Launcher
             int rowStep = 48 + Math.Min(10, extraH / 18);
 
             lblGpuInfo.Location = new Point(currentContentX, gpuY);
-            lblGpuInfo.Size = new Size(contentWidth-(uiLanguage==null?0:80), 27);
-            if(uiLanguage!=null)uiLanguage.Location=new Point(currentContentX+contentWidth-70,gpuY+1);
+            lblGpuInfo.Size = new Size(contentWidth-(uiLanguage==null?0:LanguageSelectorWidth+10), 27);
+            if(uiLanguage!=null)uiLanguage.Location=new Point(currentContentX+contentWidth-LanguageSelectorWidth,gpuY+1);
 
             for (int i = 0; i < settingRows.Count; i++)
             {
@@ -1325,7 +1300,7 @@ namespace FIFA08Launcher
                 sb.AppendLine("  \"VSync\": " + (chkVSync.Checked ? "true" : "false"));
                 sb.AppendLine("}");
 
-                File.WriteAllText(settingsFile, sb.ToString());
+                WriteConfig(ref settingsFile, sb.ToString());
             }
             catch (Exception error) { throw new IOException("No se pudo guardar la configuracion", error); }
         }
