@@ -48,9 +48,27 @@ namespace FIFA08Launcher {
    foreach(var p in m.packages)if(p==null||p.name==null||Path.GetFileName(p.name)!=p.name||!p.name.EndsWith(".zip",StringComparison.Ordinal)||p.name.Any(c=>!(Char.IsLetterOrDigit(c)||c=='.'||c=='-'||c=='_'))||!names.Add(p.name)||p.url!=prefix+p.name||!HashValid(p.sha256)||p.size<=0||p.size>1900L*1024*1024)throw new InvalidDataException("Paquete de actualizaci\u00f3n inv\u00e1lido.");
   }
   public static void DownloadPackage(UpdateAsset asset,string destination,Action<long> progress){
-   using(var response=Request(asset.url).GetResponse())using(var input=response.GetResponseStream())using(var output=new FileStream(destination,FileMode.CreateNew,FileAccess.Write,FileShare.None)){
-    var buffer=new byte[1024*1024];long total=0;int n;while((n=input.Read(buffer,0,buffer.Length))>0){total+=n;if(total>asset.size)throw new InvalidDataException("Descarga mayor de lo esperado.");output.Write(buffer,0,n);if(progress!=null)progress(total);}if(total!=asset.size)throw new IOException("Descarga incompleta.");
-   }Verify(destination,asset.sha256);
+   string partial=destination+".partial";
+   var buffer=new byte[1024*1024];
+   for(int attempt=1;;attempt++){
+    try{
+     if(progress!=null)progress(0);
+     using(var response=Request(asset.url).GetResponse())using(var input=response.GetResponseStream())using(var output=new FileStream(partial,FileMode.Create,FileAccess.Write,FileShare.None)){
+      if(response.ContentLength>=0&&response.ContentLength!=asset.size)throw new IOException("Tamano inesperado en el servidor.");
+      long total=0;
+      while(total<asset.size){
+       int n=input.Read(buffer,0,(int)Math.Min(buffer.Length,asset.size-total));
+       if(n==0)throw new IOException("Descarga incompleta.");
+       output.Write(buffer,0,n);total+=n;
+       if(progress!=null)progress(total);
+      }
+     }
+     Verify(partial,asset.sha256);File.Move(partial,destination);return;
+    }catch(Exception e){
+     if(attempt>=3||(!(e is WebException)&&!(e is IOException)))throw;
+     System.Threading.Thread.Sleep(attempt*1000);
+    }
+   }
   }
   public static bool Busy(){foreach(string name in new[]{"pes6","pes6-x","PES 6 Editor"})foreach(var p in Process.GetProcessesByName(name))using(p){try{if(!p.HasExited)return true;}catch(InvalidOperationException){}}return false;}
   static string Relative(string path){
@@ -192,10 +210,10 @@ namespace FIFA08Launcher {
   public static int RunHelper(string jobFile){
    UpdateJob job=null;try{job=Json.Deserialize<UpdateJob>(File.ReadAllText(jobFile));Validate(job.Manifest);try{using(var parent=Process.GetProcessById(job.Parent))if(!parent.WaitForExit(30000))throw new IOException("Cierra el launcher.");}catch(ArgumentException){}
     if(Busy())throw new IOException("Cierra PES 6 antes de actualizar.");string payload=Path.Combine(job.Stage,"payload");Directory.CreateDirectory(payload);Extract(job,payload);Apply(job,payload);WriteLog(job.Root,"Actualizado a "+job.Manifest.version);
-   }catch(Exception e){if(job!=null)WriteLog(job.Root,"ERROR: "+e.Message);MessageBox.Show(e.Message,"PES 6 Definitivo",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
+    }catch(Exception e){if(job!=null)WriteLog(job.Root,"ERROR: "+e.Message);MessageBox.Show(e.Message,"PES 6 Definitivo",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
    if(job.Restart)try{Process.Start(new ProcessStartInfo(Path.Combine(job.Root,"PES 6 Launcher.exe")){WorkingDirectory=job.Root,UseShellExecute=true});}catch(Exception e){WriteLog(job.Root,e.Message);}return 0;
   }
-  static void WriteLog(string root,string text){try{string dir=Path.Combine(root,"data","logs");Directory.CreateDirectory(dir);File.AppendAllText(Path.Combine(dir,"update.log"),DateTime.Now.ToString("s")+" "+text+Environment.NewLine);}catch{}}
+  internal static void WriteLog(string root,string text){try{string dir=Path.Combine(root,"data","logs");Directory.CreateDirectory(dir);File.AppendAllText(Path.Combine(dir,"update.log"),DateTime.Now.ToString("s")+" "+text+Environment.NewLine);}catch{}}
  }
  public partial class LauncherForm {
   Button repairInstallation;
@@ -258,17 +276,35 @@ namespace FIFA08Launcher {
   async Task DownloadUpdate(){
    if(downloadingUpdate||latestUpdate==null)return;if(PortUpdater.Busy()){MessageBox.Show(this,T2("Cierra el juego y el editor antes de actualizar.","Close the game and editor before updating."),Text);return;}
    if(PortUpdater.ParseVersion(latestUpdate.minimumLauncher)>PortUpdater.ParseVersion(PortUpdater.CurrentVersion)){MessageBox.Show(this,T2("Descarga el launcher actualizado desde GitHub.","Download the updated launcher from GitHub."),Text);return;}
-   string stage=Path.Combine(Path.GetTempPath(),"PES6-Update-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(stage);downloadingUpdate=true;downloadPercent=0;updateError=null;btnPlay.Enabled=false;RefreshAbout();
+   string stage=Path.Combine(Path.GetTempPath(),"PES6-Update-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(stage);downloadingUpdate=true;downloadPercent=0;downloadPart=0;updateError=null;btnPlay.Enabled=false;RefreshAbout();
    try{
     long total=latestUpdate.packages.Sum(p=>p.size),done=0;
     var disk=new DriveInfo(Path.GetPathRoot(stage));if(disk.AvailableFreeSpace<total*3+2L*1024*1024*1024)throw new IOException("No hay espacio suficiente para descargar y preparar la actualizaci\u00f3n.");
-    foreach(var asset in latestUpdate.packages){long completed=done;await Task.Run(()=>PortUpdater.DownloadPackage(asset,Path.Combine(stage,asset.name),bytes=>{if(!IsDisposed)BeginInvoke((Action)(()=>{downloadPercent=(int)Math.Min(100,(completed+bytes)*100/total);RefreshAbout();}));}));done+=asset.size;}
+    var manifest=latestUpdate;
+    await Task.Run(()=>{
+     int reported=-1;
+     for(int index=0;index<manifest.packages.Length;index++){
+      var asset=manifest.packages[index];
+      int part=index+1;
+      Action<long> report=bytes=>{
+       int percent=(int)Math.Min(100,(done+bytes)*100/total);
+       if(bytes!=0&&percent==reported)return;
+       reported=percent;
+       if(!IsDisposed)BeginInvoke((Action)(()=>{
+        downloadPart=part;downloadPartCount=manifest.packages.Length;downloadPercent=percent;RefreshUpdater();
+       }));
+      };
+      try{report(0);PortUpdater.DownloadPackage(asset,Path.Combine(stage,asset.name),report);}
+      catch(Exception e){throw new IOException(asset.name+" - "+e.Message,e);}
+      done+=asset.size;
+     }
+    });
     if(PortUpdater.Busy())throw new IOException("Cierra PES 6 antes de actualizar.");SaveSettings();
     var job=new UpdateJob{Root=InstallRoot(),Stage=stage,Manifest=latestUpdate,Parent=Process.GetCurrentProcess().Id};string jobFile=Path.Combine(stage,"update.json"),helper=Path.Combine(stage,"UpdateHelper.exe");
     File.WriteAllText(jobFile,new JavaScriptSerializer().Serialize(job));File.Copy(typeof(LauncherForm).Assembly.Location,helper);
     bool elevate=false;string probe=Path.Combine(job.Root,"bin",".update-probe-"+Guid.NewGuid().ToString("N"));try{File.WriteAllText(probe,"");File.Delete(probe);}catch(UnauthorizedAccessException){elevate=true;}
     Process.Start(new ProcessStartInfo(helper,"--apply-update \""+jobFile+"\""){UseShellExecute=true,Verb=elevate?"runas":""});downloadingUpdate=false;Close();
-   }catch(Exception e){updateError=e.Message;MessageBox.Show(this,e.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Information);}finally{downloadingUpdate=false;if(!IsDisposed){btnPlay.Enabled=true;RefreshAbout();}}
+   }catch(Exception e){updateError=e.Message;PortUpdater.WriteLog(InstallRoot(),"ERROR de descarga: "+e.Message);MessageBox.Show(this,e.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Information);}finally{downloadingUpdate=false;if(!IsDisposed){btnPlay.Enabled=true;RefreshAbout();}}
   }
   void ShowUpdatePage(){
    for(int i=0;i<modernPages.Length;i++){modernPages[i].Visible=i==5;((NavigationTab)tabButtons[i]).Selected=i==5;}modernPages[5].BringToFront();aboutStack.AutoScrollPosition=Point.Empty;RefreshAbout();
@@ -277,8 +313,9 @@ namespace FIFA08Launcher {
   void RefreshUpdateAccent(){
    if(aboutHeader==null)return;aboutHeader.BackColor=Color.FromArgb(36,37,41);aboutDetails.ForeColor=Color.Silver;aboutUpdateTitle.ForeColor=Color.FromArgb(74,222,128);aboutUpdateTitle.Visible=updateAvailable;aboutUpdateTitle.Text=T2("Actualizaci\u00f3n disponible","Update available")+" - "+(availableVersion??PortUpdater.CurrentVersion)+(previewUpdate&&latestUpdate==null?T2("\nVista previa visual","\nVisual preview"):"");((NavigationTab)tabButtons[5]).Attention=updateAvailable;tabButtons[5].Invalidate();if(updatePill!=null)updatePill.Text=T2("Actualizaci\u00f3n disponible - v","Update available - v")+(availableVersion??PortUpdater.CurrentVersion);SizeAboutHeader();if(modernReady)ModernLayout();
   }
+  int downloadPart,downloadPartCount;
   void RefreshUpdater(){githubProject.Text=T2("GitHub del proyecto","Project GitHub");updateVersion.Text=T2(latestUpdate==null?"Buscar actualizaciones":"Actualizar a "+latestUpdate.version,latestUpdate==null?"Check for updates":"Update to "+latestUpdate.version);updateVersion.Enabled=!checkingUpdate&&!downloadingUpdate&&!repairingInstallation;if(repairInstallation!=null){repairInstallation.Enabled=!repairingInstallation&&!downloadingUpdate;repairInstallation.Text=repairingInstallation?T2("Comprobando instalaci\u00f3n...","Checking installation..."):T2("Comprobar instalaci\u00f3n","Check installation");}updateVersion.BackColor=updateAvailable?PortUi.Accent:Color.FromArgb(44,45,50);updateNotice.ForeColor=Color.Silver;
-   if(checkingUpdate)updateNotice.Text=T2("Buscando actualizaciones...","Checking for updates...");else if(downloadingUpdate)updateNotice.Text=downloadPercent>=100?T2("Verificando y preparando instalaci\u00f3n...","Verifying and preparing installation..."):T2("Descargando actualizaci\u00f3n: ","Downloading update: ")+downloadPercent+"%";
+   if(checkingUpdate)updateNotice.Text=T2("Buscando actualizaciones...","Checking for updates...");else if(downloadingUpdate)updateNotice.Text=downloadPercent>=100?T2("Verificando y preparando instalaci\u00f3n...","Verifying and preparing installation..."):T2("Descargando actualizaci\u00f3n: ","Downloading update: ")+downloadPercent+"%"+(downloadPart>0?" ("+downloadPart+"/"+downloadPartCount+")":"");
    else if(updateError!=null){updateNotice.Text=T2("No se pudo conectar. Pulsa para reintentar.","Connection failed. Press to retry.");updateNotice.AccessibleDescription=updateError;updateNotice.ForeColor=Color.FromArgb(240,110,115);}else if(latestUpdate!=null){updateNotice.Text=T2("Nueva versi\u00f3n disponible: ","New version available: ")+latestUpdate.version;updateNotice.ForeColor=Color.FromArgb(240,110,115);}else updateNotice.Text=T2("Tienes la versi\u00f3n mas reciente.","You have the latest version.");
    if(previewUpdate&&latestUpdate==null&&!downloadingUpdate){updateVersion.Text=T2("Actualizar a ","Update to ")+PortUpdater.CurrentVersion+T2(" (prueba visual)"," (visual preview)");updateNotice.ForeColor=Color.FromArgb(175,219,187);updateNotice.Text=T2("Vista previa visual - Misma versi\u00f3n ","Visual preview - Same version ")+PortUpdater.CurrentVersion+"\n"+(previewNotes??"");updateNotice.Height=Math.Max(70,TextRenderer.MeasureText(updateNotice.Text,updateNotice.Font,new Size(Math.Max(1,aboutStack.ClientSize.Width-32),int.MaxValue),TextFormatFlags.WordBreak).Height+12);}
    if(previewRunning){updateVersion.Text=T2("Actualizando...","Updating...");updateNotice.Text=previewPhase+" - "+downloadPercent+"%"+T2("\nSimulacion visual: no se descargan ni reemplazan archivos.","\nVisual simulation: no files are downloaded or replaced.");updateNotice.Height=52;updateNotice.ForeColor=Color.FromArgb(0,201,125);}
